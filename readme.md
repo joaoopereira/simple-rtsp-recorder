@@ -1,4 +1,4 @@
-# simple rtsp recorder# Simple RTSP Recorder
+# Simple RTSP Recorder
 
 This is a simple web server that allows you to record files from an RTSP camera stream. It provides an easy-to-use interface for starting and stopping recordings, as well as managing the recorded files.
 
