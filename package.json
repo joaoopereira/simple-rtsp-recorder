@@ -6,7 +6,8 @@
     "start": "cross-env ENV_FILE=.env node server.js",
     "prod": "cross-env ENV_FILE=prod.env node server.js",
     "pack": "rimraf dist && pkg . && cp -r install-scripts-win/* dist",
-    "bump": "commit-and-tag-version"
+    "bump": "commit-and-tag-version",
+    "clean": "rimraf dist && rimraf node_modules && rm package-lock.json"
   },
   "bin": {
     "simple-rtsp-recorder": "server.js"
@@ -35,9 +36,9 @@
     "winston": "^3.19.0"
   },
   "devDependencies": {
+    "@yao-pkg/pkg": "^6.12.0",
+    "commit-and-tag-version": "12.6.1",
     "cross-env": "10.1.0",
-    "pkg": "5.8.1",
-    "rimraf": "^6.1.2",
-    "commit-and-tag-version": "12.6.1"
+    "rimraf": "^6.1.2"
   }
 }
