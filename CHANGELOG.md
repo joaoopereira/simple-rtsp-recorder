@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [1.3.0](https://github.com/joaoopereira/simple-rtsp-recorder/compare/v1.2.0...v1.3.0) (2026-01-17)
+
+
+### Features
+
+* add Windows installer script and GitHub Actions workflow for automated releases ([9ef8816](https://github.com/joaoopereira/simple-rtsp-recorder/commit/9ef88169ce5125a8f4f478964b1bb2daf125326b))
+
 ## 1.2.0 (2026-01-17)
 
 
