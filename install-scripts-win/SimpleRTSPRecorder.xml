@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<service>
+  <id>SimpleRTSPRecorder</id>
+  <name>Simple RTSP Recorder</name>
+  <description>RTSP camera stream recorder with web interface</description>
+  <executable>%BASE%\simple-rtsp-recorder.exe</executable>
+  <env name="ENV_FILE" value="%BASE%\prod.env"/>
+  <workingdirectory>%BASE%</workingdirectory>
+  <logpath>%BASE%\logs</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>3</keepFiles>
+  </log>
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="20 sec"/>
+  <onfailure action="restart" delay="30 sec"/>
+  <resetfailure>1 hour</resetfailure>
+  <startmode>Automatic</startmode>
+  <waithint>15 sec</waithint>
+  <sleeptime>1 sec</sleeptime>
+  <stopparentprocessfirst>true</stopparentprocessfirst>
+</service>

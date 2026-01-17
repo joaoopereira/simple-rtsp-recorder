@@ -4,6 +4,7 @@ const path = require("path");
 const fs = require("fs");
 const dotenv = require("dotenv");
 const winston = require("winston");
+const { log } = require("console");
 
 // Configure dotenv
 // When running as pkg executable, use the directory where the .exe is located
@@ -11,19 +12,14 @@ const winston = require("winston");
 const isPackaged = typeof process.pkg !== 'undefined';
 const baseDir = isPackaged ? path.dirname(process.execPath) : __dirname;
 const envFile = process.env.ENV_FILE || 'prod.env';
-const envPath = path.join(baseDir, envFile);
+// If ENV_FILE is an absolute path, use it directly; otherwise join with baseDir
+const envPath = path.isAbsolute(envFile) ? envFile : path.join(baseDir, envFile);
 
 dotenv.config({ path: envPath });
 
 // Public folder path - for pkg, assets are in snapshot (__dirname)
 // For env file and logs, use baseDir (where .exe is located)
 const publicDir = isPackaged ? path.join(__dirname, 'public') : path.join(__dirname, 'public');
-
-// Log configuration for debugging
-console.log('Running as:', isPackaged ? 'Packaged executable' : 'Node.js script');
-console.log('Base directory:', baseDir);
-console.log('Public directory:', publicDir);
-console.log('Environment file:', envPath, 'exists:', fs.existsSync(envPath));
 
 // Configure winston
 const logger = winston.createLogger({
@@ -39,6 +35,12 @@ const logger = winston.createLogger({
         new winston.transports.Console()
     ]
 });
+
+// Log configuration for debugging
+logger.info(`Running as: ${isPackaged ? 'Packaged executable' : 'Node.js script'}`);
+logger.info(`Base directory: ${baseDir}`);
+logger.info(`Public directory: ${publicDir}`);
+logger.info(`Environment file: ${envPath} (exists: ${fs.existsSync(envPath)})`);
 
 const app = express();
 const port = process.env.PORT || 8080;

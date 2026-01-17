@@ -5,7 +5,7 @@
   "scripts": {
     "start": "cross-env ENV_FILE=.env node server.js",
     "prod": "cross-env ENV_FILE=prod.env node server.js",
-    "pack": "rimraf dist && pkg .",
+    "pack": "rimraf dist && pkg . && cp -r install-scripts-win/* dist",
     "bump": "commit-and-tag-version"
   },
   "bin": {
