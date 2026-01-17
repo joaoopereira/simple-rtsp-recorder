@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [1.3.1](https://github.com/joaoopereira/simple-rtsp-recorder/compare/v1.3.0...v1.3.1) (2026-01-17)
+
+
+### Bug Fixes
+
+* update bump script to include git push with tags ([346fca5](https://github.com/joaoopereira/simple-rtsp-recorder/commit/346fca59225725c8bbda1a5058a8bf0934d4a5cd))
+
 ## [1.3.0](https://github.com/joaoopereira/simple-rtsp-recorder/compare/v1.2.0...v1.3.0) (2026-01-17)
 
 
