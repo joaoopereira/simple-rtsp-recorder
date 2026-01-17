@@ -6,9 +6,24 @@ const dotenv = require("dotenv");
 const winston = require("winston");
 
 // Configure dotenv
-dotenv.config({
-    path: path.resolve(__dirname, process.env.ENV_FILE || 'prod.env')
-});
+// When running as pkg executable, use the directory where the .exe is located
+// When running as Node.js script, use __dirname
+const isPackaged = typeof process.pkg !== 'undefined';
+const baseDir = isPackaged ? path.dirname(process.execPath) : __dirname;
+const envFile = process.env.ENV_FILE || 'prod.env';
+const envPath = path.join(baseDir, envFile);
+
+dotenv.config({ path: envPath });
+
+// Public folder path - for pkg, assets are in snapshot (__dirname)
+// For env file and logs, use baseDir (where .exe is located)
+const publicDir = isPackaged ? path.join(__dirname, 'public') : path.join(__dirname, 'public');
+
+// Log configuration for debugging
+console.log('Running as:', isPackaged ? 'Packaged executable' : 'Node.js script');
+console.log('Base directory:', baseDir);
+console.log('Public directory:', publicDir);
+console.log('Environment file:', envPath, 'exists:', fs.existsSync(envPath));
 
 // Configure winston
 const logger = winston.createLogger({
@@ -20,7 +35,7 @@ const logger = winston.createLogger({
         })
     ),
     transports: [
-        new winston.transports.File({ filename: 'server.log' }),
+        new winston.transports.File({ filename: path.join(baseDir, 'server.log') }),
         new winston.transports.Console()
     ]
 });
@@ -43,7 +58,7 @@ function buildRtspUrl() {
   }
 }
 
-app.use(express.static("public"));
+app.use(express.static(publicDir));
 
 app.get("/start", (req, res) => {
   if (recordingProcess) {

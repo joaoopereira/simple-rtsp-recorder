@@ -13,10 +13,9 @@
   },
   "pkg": {
     "scripts": "server.js",
-    "assets": "prod.env",
+    "assets": ["public/**/*"],
     "targets": [
-      "latest-win-x64",
-      "latest-linux-x64"
+      "latest-win-x64"
     ],
     "outputPath": "dist"
   },
