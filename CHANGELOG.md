@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [1.3.2](https://github.com/joaoopereira/simple-rtsp-recorder/compare/v1.3.1...v1.3.2) (2026-01-17)
+
+
+### Bug Fixes
+
+* remove GITHUB_TOKEN from release workflow and improve uninstall process in installer script ([069eeb8](https://github.com/joaoopereira/simple-rtsp-recorder/commit/069eeb8661e2da832a1398b513ccece5b92f484a))
+
 ## [1.3.1](https://github.com/joaoopereira/simple-rtsp-recorder/compare/v1.3.0...v1.3.1) (2026-01-17)
 
 
