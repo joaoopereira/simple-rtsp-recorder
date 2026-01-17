@@ -7,10 +7,38 @@ This is a simple web server that allows you to record files from an RTSP camera 
 
 ## 🚀 Installation
 
-1. 📥 Clone this repository to your local machine.
+### Quick Install (Windows Production)
+
+**One-liner installation** (Run PowerShell as Administrator):
+```powershell
+irm https://raw.githubusercontent.com/joaoopereira/simple-rtsp-recorder/main/install.ps1 | iex
+```
+
+This will:
+- Download the latest release from GitHub
+- Install to `C:\Program Files\SimpleRTSPRecorder`
+- Set up a Windows service
+- Create a default configuration file
+
+After installation:
+1. Edit `C:\Program Files\SimpleRTSPRecorder\prod.env` with your camera settings
+2. The service will be running automatically
+3. Access the web interface at `http://localhost:8080`
+
+### Development Install
+
+1. 📥 Clone this repository to your local machine
 2. 📦 Install dependencies: `npm install`
-3. 🛠️ Configure the server settings in the `.env` file.
+3. 🛠️ Configure the server settings in the `.env` file
 4. ▶️ Start the server: `npm start`
+
+### Manual Windows Installation
+
+1. Download the latest release from the [Releases page](https://github.com/joaoopereira/simple-rtsp-recorder/releases)
+2. Extract `simple-rtsp-recorder-win-x64.zip` to your desired location
+3. Edit `prod.env` with your camera settings
+4. Run `Install-Service.ps1` as Administrator to install as a Windows service
+5. Access the web interface at `http://localhost:8080`
 
 
 ## 🖥️ Usage
@@ -37,6 +65,20 @@ You can customize the server settings by editing the `.env` file. Here are some 
 ## 🤝 Contributing
 
 Contributions are welcome! If you find any issues or have suggestions for improvements, please open an issue or submit a pull request. 🙏
+
+## 🔧 Building Releases
+
+To create a new release:
+
+```bash
+# Bump version and create a tag
+npm run bump
+
+# Push the tag to trigger GitHub Actions build
+git push --follow-tags
+```
+
+This will automatically build the Windows binary and publish it as a GitHub release.
 
 
 ## 📄 License
