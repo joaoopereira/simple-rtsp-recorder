@@ -30,6 +30,18 @@ const port = process.env.PORT || 8080;
 
 let recordingProcess = null;
 let recordingStartTime = null;
+let currentRecordingFile = null;
+
+// Helper function to build RTSP URL
+function buildRtspUrl() {
+  const { RTSP_USER, RTSP_PASSWORD, RTSP_IP, RTSP_PORT, RTSP_SDP } = process.env;
+  
+  if (RTSP_USER && RTSP_PASSWORD) {
+    return `rtsp://${RTSP_USER}:${RTSP_PASSWORD}@${RTSP_IP}:${RTSP_PORT}/${RTSP_SDP}`;
+  } else {
+    return `rtsp://${RTSP_IP}:${RTSP_PORT}/${RTSP_SDP}`;
+  }
+}
 
 app.use(express.static("public"));
 
@@ -39,7 +51,7 @@ app.get("/start", (req, res) => {
     return res.status(400).send("Recording already in progress");
   }
 
-  const rtspUrl = `rtsp://${process.env.RTSP_USER}:${process.env.RTSP_PASSWORD}@${process.env.RTSP_IP}:${process.env.RTSP_PORT}/${process.env.RTSP_SDP}`;
+  const rtspUrl = buildRtspUrl();
   const outputDir = process.env.OUTPUT_DIR;
   const now = new Date();
   const year = now.getFullYear();
@@ -50,10 +62,12 @@ app.get("/start", (req, res) => {
   const second = String(now.getSeconds()).padStart(2, "0");
   const timestamp = `${year}-${month}-${day}_${hour}${minute}${second}`;
   const outputPath = path.join(outputDir, `${timestamp}.mp4`);
+  currentRecordingFile = `${timestamp}.mp4`;
 
   // Start recording if the stream is available
   recordingProcess = ffmpeg(rtspUrl)
-    .outputOptions(["-vcodec copy", "-acodec copy"])
+    .inputOptions(["-rtsp_transport tcp"])
+    .outputOptions(["-c:v copy", "-c:a copy", "-movflags +faststart"])
     .save(outputPath)
     .on("start", (output) => {
       logger.info("Recording started");
@@ -69,11 +83,13 @@ app.get("/start", (req, res) => {
       logger.info(output);
       recordingProcess = null;
       recordingStartTime = null; // Reset the start time
+      currentRecordingFile = null; // Clear the current recording file
     })
     .on("error", (err) => {
       logger.error(`FFmpeg error: ${err.message}`);
       recordingProcess = null;
       recordingStartTime = null; // Reset the start time
+      currentRecordingFile = null; // Clear the current recording file
     });
 });
 
@@ -86,6 +102,7 @@ app.get("/stop", (req, res) => {
   recordingProcess.kill("SIGINT");
   recordingProcess = null;
   recordingStartTime = null; // Reset the start time
+  currentRecordingFile = null; // Clear the current recording file
   logger.info("Recording stopped");
   res.send("Recording stopped");
 });
@@ -100,6 +117,7 @@ app.get("/recordings", (req, res) => {
 
     const recordings = files
       .filter((file) => file.endsWith(".mp4"))
+      .filter((file) => file !== currentRecordingFile) // Exclude current recording
       .map((file) => ({
         name: file,
         createdAt: fs.statSync(path.join(outputDir, file)).birthtime,
