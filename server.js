@@ -64,33 +64,72 @@ app.get("/start", (req, res) => {
   const outputPath = path.join(outputDir, `${timestamp}.mp4`);
   currentRecordingFile = `${timestamp}.mp4`;
 
+  let responseSent = false;
+  let connectionVerified = false;
+
   // Start recording if the stream is available
   recordingProcess = ffmpeg(rtspUrl)
     .inputOptions(["-rtsp_transport tcp"])
     .outputOptions(["-c:v copy", "-c:a copy", "-movflags +faststart"])
     .save(outputPath)
     .on("start", (output) => {
-      logger.info("Recording started");
-      recordingStartTime = now; // Store the start time
+      logger.info("FFmpeg process started");
       logger.info(output);
-      res.json({
-        message: "Recording started",
-        startTime: recordingStartTime.toISOString(),
-      });
+    })
+    .on("codecData", (data) => {
+      // This event fires when ffmpeg successfully reads stream info
+      if (!connectionVerified) {
+        connectionVerified = true;
+        recordingStartTime = now;
+        logger.info("Recording started - connection verified");
+        if (!responseSent) {
+          responseSent = true;
+          res.json({
+            message: "Recording started",
+            startTime: recordingStartTime.toISOString(),
+          });
+        }
+      }
     })
     .on("end", (output) => {
       logger.info("Recording finished");
       logger.info(output);
       recordingProcess = null;
-      recordingStartTime = null; // Reset the start time
-      currentRecordingFile = null; // Clear the current recording file
+      recordingStartTime = null;
+      currentRecordingFile = null;
     })
     .on("error", (err) => {
       logger.error(`FFmpeg error: ${err.message}`);
       recordingProcess = null;
-      recordingStartTime = null; // Reset the start time
-      currentRecordingFile = null; // Clear the current recording file
+      recordingStartTime = null;
+      currentRecordingFile = null;
+      
+      if (!responseSent) {
+        responseSent = true;
+        res.status(500).json({ 
+          error: "Failed to connect to camera",
+          message: err.message 
+        });
+      }
     });
+
+  // Timeout after 30 seconds if connection is not verified
+  setTimeout(() => {
+    if (!connectionVerified && !responseSent) {
+      responseSent = true;
+      logger.error("Connection timeout - unable to connect to camera");
+      if (recordingProcess) {
+        recordingProcess.kill("SIGKILL");
+        recordingProcess = null;
+        recordingStartTime = null;
+        currentRecordingFile = null;
+      }
+      res.status(500).json({ 
+        error: "Connection timeout",
+        message: "Unable to connect to camera within 30 seconds" 
+      });
+    }
+  }, 30000);
 });
 
 app.get("/stop", (req, res) => {

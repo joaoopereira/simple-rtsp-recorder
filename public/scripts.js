@@ -59,7 +59,14 @@ function stopTimer() {
 startBtn.addEventListener("click", () => {
   loadingMessage.classList.remove("hidden");
   fetch("/start")
-    .then((response) => response.json())
+    .then((response) => {
+      if (!response.ok) {
+        return response.json().then(err => {
+          throw new Error(err.message || 'Failed to start recording');
+        });
+      }
+      return response.json();
+    })
     .then((data) => {
       loadingMessage.classList.add("hidden");
       startBtn.disabled = true;
@@ -71,6 +78,7 @@ startBtn.addEventListener("click", () => {
     .catch((error) => {
       loadingMessage.classList.add("hidden");
       console.error("Error:", error);
+      alert("Failed to connect to camera: " + error.message);
     });
 });
 
