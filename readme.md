@@ -1,36 +1,44 @@
-# Simple RTSP Recorder
 
-This is a simple web server that allows you to record files from an RTSP camera stream. It provides an easy-to-use interface for starting and stopping recordings, as well as managing the recorded files.
+# 🎥 Simple RTSP Recorder
 
-## Installation
 
-1. Clone this repository to your local machine.
-2. Install the required dependencies by running `npm install`.
-3. Configure the server settings in the `.env` file.
-4. Start the server by running `npm start`.
+This is a simple web server that allows you to record files from an RTSP camera stream. It provides an easy-to-use interface for starting and stopping recordings, as well as managing the recorded files. Perfect for quick camera archiving! 🚦
 
-## Usage
 
-1. Access the web interface by navigating to `http://localhost:8080` in your browser.
-2. Enter the RTSP camera stream URL and click on the "Start Recording" button.
-3. To stop the recording, click on the "Stop Recording" button.
-4. The recorded files will be saved in the specified output directory.
+## 🚀 Installation
 
-## Configuration
+1. 📥 Clone this repository to your local machine.
+2. 📦 Install dependencies: `npm install`
+3. 🛠️ Configure the server settings in the `.env` file.
+4. ▶️ Start the server: `npm start`
 
-You can customize the server settings by modifying the `.env` file. Here are some of the available options:
 
-- `RTSP_USER`: The username for the RTSP camera stream.
-- `RTSP_PASSWORD`: The password for the RTSP camera stream.
-- `RTSP_IP`: The IP address of the RTSP camera stream.
-- `RTSP_PORT`: The port number of the RTSP camera stream.
-- `RTSP_SDP`: The SDP file for the RTSP camera stream.
-- `OUTPUT_DIR`: The directory where the recorded files will be saved.
+## 🖥️ Usage
 
-## Contributing
+1. 🌐 Open your browser and go to `http://localhost:8080`
+2. 🎬 Click the **Start** button to begin recording from your RTSP camera stream.
+3. ⏹️ Click the **Stop** button to end the recording.
+4. 💾 Your recordings will appear in the list and be saved in the output directory.
 
-Contributions are welcome! If you find any issues or have suggestions for improvements, please open an issue or submit a pull request.
 
-## License
+## ⚙️ Configuration
+
+
+You can customize the server settings by editing the `.env` file. Here are some of the available options:
+
+* `RTSP_USER` – Username for the RTSP camera stream (optional)
+* `RTSP_PASSWORD` – Password for the RTSP camera stream (optional)
+* `RTSP_IP` – IP address of the RTSP camera
+* `RTSP_PORT` – Port number (usually 554)
+* `RTSP_SDP` – SDP file or stream path (e.g. `live1.sdp`)
+* `OUTPUT_DIR` – Directory where recordings are saved
+
+
+## 🤝 Contributing
+
+Contributions are welcome! If you find any issues or have suggestions for improvements, please open an issue or submit a pull request. 🙏
+
+
+## 📄 License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more information.
