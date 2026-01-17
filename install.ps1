@@ -67,14 +67,23 @@ try {
 Write-Host "Extracting files..." -ForegroundColor Yellow
 try {
     if (Test-Path $InstallDir) {
-        Write-Host "Removing existing installation..." -ForegroundColor Yellow
-        # Try to stop service if it exists
+        Write-Host "Existing installation found. Removing..." -ForegroundColor Yellow
+        
+        # Uninstall service if it exists
         $service = Get-Service -Name "SimpleRTSPRecorder" -ErrorAction SilentlyContinue
         if ($service) {
-            Write-Host "Stopping existing service..." -ForegroundColor Yellow
-            & "$InstallDir\Uninstall-Service.ps1"
+            Write-Host "Uninstalling existing service..." -ForegroundColor Yellow
+            $uninstallScript = Join-Path $InstallDir "Uninstall-Service.ps1"
+            if (Test-Path $uninstallScript) {
+                & $uninstallScript
+                Start-Sleep -Seconds 2
+                Write-Host "Service uninstalled" -ForegroundColor Green
+            }
         }
+        
+        # Remove installation directory
         Remove-Item $InstallDir -Recurse -Force
+        Write-Host "Previous installation removed" -ForegroundColor Green
     }
     
     New-Item -ItemType Directory -Path $InstallDir | Out-Null
