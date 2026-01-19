@@ -18,6 +18,7 @@ out/
 
 # Environment variables
 prod.env
+.env.test
 
 # IDE files
 .vscode/

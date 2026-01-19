@@ -164,7 +164,7 @@ app.get("/stop", (req, res) => {
   recordingProcess.kill("SIGINT");
   // Don't set recordingProcess to null here - wait for the 'end' event
   // The 'end' event handler will clean up all state variables
-  res.send("Recording stopping");
+  res.send("Recording stopped");
 });
 
 app.get("/recordings", (req, res) => {
