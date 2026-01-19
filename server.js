@@ -48,6 +48,7 @@ const port = process.env.PORT || 8080;
 let recordingProcess = null;
 let recordingStartTime = null;
 let currentRecordingFile = null;
+let stoppingRecording = false;
 
 // Helper function to build RTSP URL
 function buildRtspUrl() {
@@ -63,9 +64,9 @@ function buildRtspUrl() {
 app.use(express.static(publicDir));
 
 app.get("/start", (req, res) => {
-  if (recordingProcess) {
-    logger.warn("Attempt to start recording while another is in progress");
-    return res.status(400).send("Recording already in progress");
+  if (recordingProcess || stoppingRecording) {
+    logger.warn("Attempt to start recording while another is in progress or stopping");
+    return res.status(400).send("Recording already in progress or stopping");
   }
 
   const rtspUrl = buildRtspUrl();
@@ -114,12 +115,14 @@ app.get("/start", (req, res) => {
       recordingProcess = null;
       recordingStartTime = null;
       currentRecordingFile = null;
+      stoppingRecording = false;
     })
     .on("error", (err) => {
       logger.error(`FFmpeg error: ${err.message}`);
       recordingProcess = null;
       recordingStartTime = null;
       currentRecordingFile = null;
+      stoppingRecording = false;
       
       if (!responseSent) {
         responseSent = true;
@@ -140,6 +143,7 @@ app.get("/start", (req, res) => {
         recordingProcess = null;
         recordingStartTime = null;
         currentRecordingFile = null;
+        stoppingRecording = false;
       }
       res.status(500).json({ 
         error: "Connection timeout",
@@ -155,11 +159,11 @@ app.get("/stop", (req, res) => {
     return res.status(400).send("No recording in progress");
   }
 
+  logger.info("Stopping recording...");
+  stoppingRecording = true;
   recordingProcess.kill("SIGINT");
-  recordingProcess = null;
-  recordingStartTime = null; // Reset the start time
-  currentRecordingFile = null; // Clear the current recording file
-  logger.info("Recording stopped");
+  // Don't set recordingProcess to null here - wait for the 'end' event
+  // The 'end' event handler will clean up all state variables
   res.send("Recording stopped");
 });
 
@@ -214,9 +218,13 @@ app.delete('/recordings/:filename', (req, res) => {
 
 app.get("/status", (req, res) => {
   if (recordingProcess) {
-    res.json({ recording: true, startTime: recordingStartTime.toISOString() });
+    res.json({ 
+      recording: true, 
+      stopping: stoppingRecording,
+      startTime: recordingStartTime.toISOString() 
+    });
   } else {
-    res.json({ recording: false });
+    res.json({ recording: false, stopping: false });
   }
 });
 
