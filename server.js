@@ -162,8 +162,17 @@ app.get("/stop", (req, res) => {
   logger.info("Stopping recording...");
   stoppingRecording = true;
   recordingProcess.kill("SIGINT");
-  // Don't set recordingProcess to null here - wait for the 'end' event
-  // The 'end' event handler will clean up all state variables
+  recordingProcess = null;
+  recordingStartTime = null;
+  currentRecordingFile = null;
+  
+  // Clear stopping flag after 1 second to prevent rapid start attempts
+  // This gives the ffmpeg process time to fully terminate before allowing new recordings
+  setTimeout(() => {
+    stoppingRecording = false;
+    logger.info("Recording stopped - ready for new recording");
+  }, 1000);
+  
   res.send("Recording stopped");
 });
 
