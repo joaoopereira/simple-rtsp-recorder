@@ -111,13 +111,23 @@ app.get("/start", (req, res) => {
     })
     .on("end", (output) => {
       logger.info("Recording finished");
-      logger.info(output);
+      if (output) logger.info(output);
       recordingProcess = null;
       recordingStartTime = null;
       currentRecordingFile = null;
       stoppingRecording = false;
     })
-    .on("error", (err) => {
+    .on("error", (err, stdout, stderr) => {
+      // If we're stopping the recording, this is expected
+      if (stoppingRecording) {
+        logger.info("Recording stopped gracefully");
+        recordingProcess = null;
+        recordingStartTime = null;
+        currentRecordingFile = null;
+        stoppingRecording = false;
+        return;
+      }
+      
       logger.error(`FFmpeg error: ${err.message}`);
       recordingProcess = null;
       recordingStartTime = null;
@@ -161,17 +171,16 @@ app.get("/stop", (req, res) => {
 
   logger.info("Stopping recording...");
   stoppingRecording = true;
-  recordingProcess.kill("SIGINT");
-  recordingProcess = null;
-  recordingStartTime = null;
-  currentRecordingFile = null;
   
-  // Clear stopping flag after 1 second to prevent rapid start attempts
-  // This gives the ffmpeg process time to fully terminate before allowing new recordings
-  setTimeout(() => {
-    stoppingRecording = false;
-    logger.info("Recording stopped - ready for new recording");
-  }, 1000);
+  // Send 'q' command to ffmpeg stdin for graceful stop
+  // This allows ffmpeg to properly finalize the MP4 file
+  if (recordingProcess.ffmpegProc && recordingProcess.ffmpegProc.stdin) {
+    logger.info("Sending 'q' command to ffmpeg for graceful stop");
+    recordingProcess.ffmpegProc.stdin.write('q');
+  }
+  
+  // Clear currentRecordingFile immediately so it shows up in the list
+  currentRecordingFile = null;
   
   res.send("Recording stopped");
 });
