@@ -7,7 +7,9 @@
     "prod": "cross-env ENV_FILE=prod.env node server.js",
     "pack": "rimraf dist && pkg . && cp -r install-scripts-win/* dist",
     "bump": "commit-and-tag-version && git push --follow-tags",
-    "clean": "rimraf dist && rimraf node_modules && rm package-lock.json"
+    "clean": "rimraf dist && rimraf node_modules && rm package-lock.json",
+    "prepare": "husky",
+    "commitlint": "commitlint --edit"
   },
   "bin": {
     "simple-rtsp-recorder": "server.js"
@@ -36,9 +38,12 @@
     "winston": "^3.19.0"
   },
   "devDependencies": {
+    "@commitlint/cli": "^20.3.1",
+    "@commitlint/config-conventional": "^20.3.1",
     "@yao-pkg/pkg": "^6.12.0",
     "commit-and-tag-version": "12.6.1",
     "cross-env": "10.1.0",
+    "husky": "^9.1.7",
     "rimraf": "^6.1.2"
   }
 }
