@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [1.3.3](https://github.com/joaoopereira/simple-rtsp-recorder/compare/v1.3.2...v1.3.3) (2026-01-20)
+
+
+### Bug Fixes
+
+* race condition allowing multiple ffmpeg processes to run simultaneously ([70e72be](https://github.com/joaoopereira/simple-rtsp-recorder/commit/70e72bed7ab80f859ab55aa8f3ffe78dcaf9748c))
+
 ## [1.3.2](https://github.com/joaoopereira/simple-rtsp-recorder/compare/v1.3.1...v1.3.2) (2026-01-17)
 
 
