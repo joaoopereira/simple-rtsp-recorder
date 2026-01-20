@@ -11,17 +11,17 @@ This is a simple web server that allows you to record files from an RTSP camera 
 
 **One-liner installation** (Run PowerShell as Administrator):
 ```powershell
-irm https://raw.githubusercontent.com/joaoopereira/simple-rtsp-recorder/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/joaoopereira/simple-rtsp-recorder/development/install.ps1 | iex
 ```
 
 This will:
 - Download the latest release from GitHub
-- Install to `C:\Program Files\SimpleRTSPRecorder`
+- Install to the current directory
 - Set up a Windows service
 - Create a default configuration file
 
 After installation:
-1. Edit `C:\Program Files\SimpleRTSPRecorder\prod.env` with your camera settings
+1. Edit `prod.env` with your camera settings
 2. The service will be running automatically
 3. Access the web interface at `http://localhost:8080`
 

@@ -20,7 +20,7 @@ if (-not $isAdmin) {
 }
 
 # Configuration
-$InstallDir = "C:\Program Files\SimpleRTSPRecorder"
+$InstallDir = Join-Path $pwd "SimpleRTSPRecorder"
 $TempDir = Join-Path $env:TEMP "SimpleRTSPRecorder"
 $GitHubRepo = "joaoopereira/simple-rtsp-recorder"
 
@@ -55,12 +55,23 @@ try {
 Write-Host "Downloading Simple RTSP Recorder..." -ForegroundColor Yellow
 $zipFile = Join-Path $TempDir "simple-rtsp-recorder.zip"
 try {
-    Invoke-WebRequest -Uri $downloadUrl -OutFile $zipFile -UseBasicParsing
+    # Use BITS for better progress display
+    Start-BitsTransfer -Source $downloadUrl -Destination $zipFile -Description "Downloading Simple RTSP Recorder" -DisplayName "Simple RTSP Recorder"
     Write-Host "Download complete" -ForegroundColor Green
 } catch {
-    Write-Host "ERROR: Failed to download release" -ForegroundColor Red
-    Write-Host $_.Exception.Message -ForegroundColor Red
-    exit 1
+    # Fallback to Invoke-WebRequest if BITS fails
+    Write-Host "Trying alternative download method..." -ForegroundColor Yellow
+    try {
+        $ProgressPreference = 'Continue'
+        Invoke-WebRequest -Uri $downloadUrl -OutFile $zipFile -UseBasicParsing
+        Write-Host "Download complete" -ForegroundColor Green
+    } catch {
+        Write-Host "ERROR: Failed to download release" -ForegroundColor Red
+        Write-Host $_.Exception.Message -ForegroundColor Red
+        exit 1
+    } finally {
+        $ProgressPreference = 'SilentlyContinue'
+    }
 }
 
 # Extract files
@@ -76,8 +87,21 @@ try {
             $uninstallScript = Join-Path $InstallDir "Uninstall-Service.ps1"
             if (Test-Path $uninstallScript) {
                 & $uninstallScript
-                Start-Sleep -Seconds 2
-                Write-Host "Service uninstalled" -ForegroundColor Green
+                
+                # Wait for service to be fully removed
+                Write-Host "Waiting for service to be fully removed..." -ForegroundColor Yellow
+                $maxWait = 30
+                $waited = 0
+                while ((Get-Service -Name "SimpleRTSPRecorder" -ErrorAction SilentlyContinue) -and ($waited -lt $maxWait)) {
+                    Start-Sleep -Seconds 1
+                    $waited++
+                }
+                
+                if (Get-Service -Name "SimpleRTSPRecorder" -ErrorAction SilentlyContinue) {
+                    Write-Host "WARNING: Service still exists after uninstall. Manual intervention may be required." -ForegroundColor Yellow
+                } else {
+                    Write-Host "Service uninstalled successfully" -ForegroundColor Green
+                }
             }
         }
         
@@ -97,7 +121,7 @@ try {
 
 # Create environment file
 Write-Host ""
-Write-Host "Creating default configuration..." -ForegroundColor Yellow
+Write-Host "Checking configuration file..." -ForegroundColor Yellow
 $envFile = Join-Path $InstallDir "prod.env"
 if (-not (Test-Path $envFile)) {
     @"
@@ -119,18 +143,27 @@ OUTPUT_DIR=recordings
 "@ | Out-File -FilePath $envFile -Encoding UTF8
     Write-Host "Default configuration created at: $envFile" -ForegroundColor Green
     Write-Host "IMPORTANT: Edit this file with your camera settings!" -ForegroundColor Yellow
+} else {
+    Write-Host "Existing configuration preserved at: $envFile" -ForegroundColor Green
 }
 
 # Install as Windows Service
 Write-Host ""
 Write-Host "Installing Windows service..." -ForegroundColor Yellow
 try {
-    Set-Location $InstallDir
-    & "$InstallDir\Install-Service.ps1"
-    Write-Host "Service installed successfully" -ForegroundColor Green
+    $installServiceScript = Join-Path $InstallDir "Install-Service.ps1"
+    if (Test-Path $installServiceScript) {
+        Push-Location $InstallDir
+        & $installServiceScript
+        Pop-Location
+        Write-Host "Service installed successfully" -ForegroundColor Green
+    } else {
+        Write-Host "WARNING: Install-Service.ps1 not found" -ForegroundColor Yellow
+    }
 } catch {
     Write-Host "WARNING: Service installation failed" -ForegroundColor Yellow
     Write-Host "You can run Install-Service.ps1 manually from: $InstallDir" -ForegroundColor Yellow
+    Pop-Location -ErrorAction SilentlyContinue
 }
 
 # Cleanup
