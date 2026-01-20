@@ -166,7 +166,8 @@ app.get("/stop", (req, res) => {
   recordingStartTime = null;
   currentRecordingFile = null;
   
-  // Clear stopping flag after a delay to prevent rapid start attempts
+  // Clear stopping flag after 1 second to prevent rapid start attempts
+  // This gives the ffmpeg process time to fully terminate before allowing new recordings
   setTimeout(() => {
     stoppingRecording = false;
     logger.info("Recording stopped - ready for new recording");
