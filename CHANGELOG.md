@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [1.3.4](https://github.com/joaoopereira/simple-rtsp-recorder/compare/v1.3.3...v1.3.4) (2026-01-20)
+
+
+### Bug Fixes
+
+* handle graceful stopping of recording and improve error logging ([986e901](https://github.com/joaoopereira/simple-rtsp-recorder/commit/986e90137e75c806a52013873b4729a460665e43))
+* improve installer script and README ([a142fdd](https://github.com/joaoopereira/simple-rtsp-recorder/commit/a142fddff6f5b3d6057d1c1e092787c0762764fb))
+* recording not stopping - clear state immediately with delayed flag reset ([57ff412](https://github.com/joaoopereira/simple-rtsp-recorder/commit/57ff4120acceee157a36dc69115935ecfbc48019))
+
 ## [1.3.3](https://github.com/joaoopereira/simple-rtsp-recorder/compare/v1.3.2...v1.3.3) (2026-01-20)
 
 
