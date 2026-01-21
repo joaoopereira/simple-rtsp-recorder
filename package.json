@@ -8,8 +8,7 @@
     "pack": "rimraf dist && pkg . && cp -r install-scripts-win/* dist",
     "bump": "commit-and-tag-version && git push --follow-tags",
     "clean": "rimraf dist && rimraf node_modules && rm package-lock.json",
-    "prepare": "husky",
-    "commitlint": "commitlint --edit"
+    "prepare": "husky"
   },
   "bin": {
     "simple-rtsp-recorder": "server.js"
