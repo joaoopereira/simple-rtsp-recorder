@@ -65,6 +65,7 @@ To run the app against the fake camera, see `.claude/skills/run-app/SKILL.md`.
 - Validate file names with `recorder.ValidName` before touching the disk (prevents path traversal).
 - Windows-only code goes in `_windows.go` files, with a `_other.go` counterpart (`//go:build !windows`).
 - User-facing error messages are Portuguese, because they are shown in the UI as they are.
+- The site sits behind Cloudflare, which caches `.css`, `.js` and `.svg` by extension. `index.html` is served with `Cache-Control: no-store`, and every asset it references is rewritten to `name?v=<content hash>` (`internal/server/static.go`). A new file in `web/` must be added both to `//go:embed` in `web/embed.go` and to `assets` in `static.go`. Never reference an asset without the hash: in v2.0.0, Cloudflare kept serving the 1.x `style.css`, and the public page rendered unstyled.
 
 ## Adding things
 

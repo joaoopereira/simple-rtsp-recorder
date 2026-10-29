@@ -27,6 +27,7 @@ Cloudflare Access may block automated requests. If it does, ask the user to past
 | Update not applied | `update.state` is `waiting` while recording or finalizing (expected). On `error`, the message says why. A `dev` version never updates. |
 | "palavra-passe de administrador não definida" | No admin password yet. Run `install.ps1` again on the PC, or `set-admin-password` there. It can't be set remotely, by design. |
 | Admin locked out ("demasiadas tentativas") | 5 failed logins from that IP. Wait 15 minutes, or restart the service. |
+| Public site looks unstyled or outdated, but `localhost:8080` on the PC is fine | Cloudflare is caching an old asset. Check that `index.html` references every asset with `?v=<hash>` (`internal/server/static.go`). Immediate workaround: Cloudflare dashboard → Caching → Purge Everything. |
 | Old version still shown after an update | The service did not restart. Check the recovery actions in `service.Install`. Running `install.ps1` again on the PC re-installs the service. |
 
 ## 3. Reproduce locally

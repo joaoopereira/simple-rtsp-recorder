@@ -1,7 +1,10 @@
 package server
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"io/fs"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -263,5 +266,42 @@ func TestClientIP(t *testing.T) {
 	r.RemoteAddr = "192.168.1.50:5000"
 	if got := clientIP(r); got != "192.168.1.50" {
 		t.Errorf("LAN client with forged header = %q", got)
+	}
+}
+
+// The page must reference every asset by a content hash so that no cache
+// (Cloudflare kept serving the 1.x style.css) can serve another version.
+func TestStaticAssetsAreVersioned(t *testing.T) {
+	srv, _ := newTestServer(t)
+	resp, page := do(t, "GET", srv.URL+"/", "")
+	if cc := resp.Header.Get("Cache-Control"); cc != "no-store" {
+		t.Errorf("index Cache-Control = %q, want no-store", cc)
+	}
+	for _, name := range assets {
+		data, err := fs.ReadFile(web.FS, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(data)
+		url := name + "?v=" + hex.EncodeToString(sum[:6])
+		if !strings.Contains(page, `"`+url+`"`) {
+			t.Errorf("index.html does not reference %s", url)
+		}
+		if strings.Contains(page, `"`+name+`"`) {
+			t.Errorf("index.html still has an unversioned reference to %s", name)
+		}
+		resp, body := do(t, "GET", srv.URL+"/"+url, "")
+		if resp.StatusCode != 200 || body != string(data) {
+			t.Errorf("GET %s = %d", url, resp.StatusCode)
+		}
+		if cc := resp.Header.Get("Cache-Control"); !strings.Contains(cc, "immutable") {
+			t.Errorf("%s Cache-Control = %q, want immutable", url, cc)
+		}
+		if resp, _ := do(t, "GET", srv.URL+"/"+name+"?v=stale", ""); resp.Header.Get("Cache-Control") != "no-cache" {
+			t.Errorf("%s with a stale hash must not be cached long", name)
+		}
+	}
+	if resp, _ := do(t, "GET", srv.URL+"/style.css", ""); !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/css") {
+		t.Errorf("style.css Content-Type = %q", resp.Header.Get("Content-Type"))
 	}
 }

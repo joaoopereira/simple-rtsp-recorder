@@ -76,12 +76,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/admin/password", s.requireAdmin(s.changePassword))
 	mux.HandleFunc("POST /api/update/check", s.checkUpdate)
 	mux.HandleFunc("GET /api/logs", s.logs)
-	static := http.FileServerFS(s.Static)
-	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		// Always revalidate so a new version's UI is picked up after an update.
-		w.Header().Set("Cache-Control", "no-cache")
-		static.ServeHTTP(w, r)
-	})
+	mux.Handle("GET /", newStaticHandler(s.Static))
 	return mux
 }
 
