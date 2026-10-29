@@ -1,0 +1,36 @@
+---
+name: debug-production
+description: Investigate a problem reported on the installed recorder (failed recording, camera not connecting, update not applied) without physical access to the PC. Use when the user reports a bug seen in the live app.
+---
+
+# Debug a problem on the installed PC
+
+Nobody can easily go to the PC, so start from what the app exposes remotely.
+
+## 1. Gather evidence (read-only)
+
+Ask the user for the following, or fetch it yourself if the sandbox can reach the site. Only use the read-only `GET` endpoints, and never start, stop or delete anything in production.
+
+- `https://futsal.retorta.com/api/status`: recorder state, last error, version, update state, free disk.
+- `https://futsal.retorta.com/api/logs`: the last 500 log lines (ffmpeg errors are prefixed `ffmpeg:`). In the UI, this is the "Registos" link in the footer.
+- `https://futsal.retorta.com/api/recordings`: file sizes. A tiny file usually means the camera dropped.
+
+Cloudflare Access may block automated requests. If it does, ask the user to paste the output.
+
+## 2. Common causes
+
+| Symptom | Where to look |
+|---|---|
+| `não foi possível ligar à câmara: ...` | The camera IP, path or credentials, or the camera is offline. `POST /api/settings/test` from the UI ("Testar ligação") shows the ffmpeg error. |
+| Stuck in `reconnecting` | The camera or network is dropping. The stall detector (`stallTimeout`) and the `-timeout` input option are in `recorder.go`. |
+| Recording plays badly or can't seek | Finalization failed. Look for "finalize failed" in the logs: the file stays fragmented MP4, which is still playable. |
+| Update not applied | `update.state` is `waiting` while recording or finalizing (expected). On `error`, the message says why. A `dev` version never updates. |
+| Old version still shown after an update | The service did not restart. Check the recovery actions in `service.Install`. Running `install.ps1` again on the PC re-installs the service. |
+
+## 3. Reproduce locally
+
+Use the `run-app` skill: the fake camera plus `pkill -x mediamtx` simulates a camera drop, and killing the app simulates a restart. Write a failing test in `internal/recorder/recorder_test.go` or `internal/server/server_test.go` before fixing.
+
+## 4. Ship the fix
+
+Open a PR, get CI green, merge it, then use the `release` skill with `bump: patch`. The PC installs the fix by itself once it is idle.

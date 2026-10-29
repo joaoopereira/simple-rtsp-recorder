@@ -1,0 +1,204 @@
+// Simple RTSP Recorder: records an RTSP camera to MP4 files, controlled from
+// a web page. Runs as a Windows service and updates itself from GitHub.
+//
+//	simple-rtsp-recorder.exe            run (as service when started by Windows)
+//	simple-rtsp-recorder.exe install    install/replace the Windows service and start it
+//	simple-rtsp-recorder.exe uninstall  stop and remove the Windows service
+//	simple-rtsp-recorder.exe version    print the version
+//
+// Flags: -dir <path> uses another base directory (config, logs) — handy for
+// development, where the binary lives in a temp folder.
+package main
+
+import (
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"net"
+	"net/http"
+	"os"
+	"os/exec"
+	"os/signal"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"syscall"
+	"time"
+
+	"github.com/joaoopereira/simple-rtsp-recorder/internal/config"
+	"github.com/joaoopereira/simple-rtsp-recorder/internal/logging"
+	"github.com/joaoopereira/simple-rtsp-recorder/internal/recorder"
+	"github.com/joaoopereira/simple-rtsp-recorder/internal/server"
+	"github.com/joaoopereira/simple-rtsp-recorder/internal/service"
+	"github.com/joaoopereira/simple-rtsp-recorder/internal/updater"
+	"github.com/joaoopereira/simple-rtsp-recorder/web"
+)
+
+// version is set at build time: -ldflags "-X main.version=v2.0.0".
+var version = "dev"
+
+const (
+	serviceName = "SimpleRTSPRecorder" // same name as 1.x so upgrades replace it
+	displayName = "Simple RTSP Recorder"
+	description = "Grava o stream RTSP da câmara, com interface web."
+	repo        = "joaoopereira/simple-rtsp-recorder"
+)
+
+func main() {
+	exe, err := os.Executable()
+	if err == nil {
+		exe, err = filepath.EvalSymlinks(exe)
+	}
+	if err != nil {
+		fatal(err)
+	}
+	dir := flag.String("dir", filepath.Dir(exe), "base directory for config, logs and default recordings folder")
+	flag.Parse()
+
+	switch cmd := flag.Arg(0); cmd {
+	case "", "run":
+		if service.IsService() {
+			err = service.Run(serviceName, func(ctx context.Context) (bool, error) { return run(ctx, exe, *dir) })
+			break
+		}
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		var restart bool
+		restart, err = run(ctx, exe, *dir)
+		stop()
+		if err == nil && restart {
+			err = reexec(exe)
+		}
+	case "install":
+		// Don't touch config.json here: the service just started and owns it.
+		if err = service.Install(serviceName, displayName, description, exe); err == nil {
+			fmt.Println("Serviço instalado e iniciado.")
+		}
+	case "uninstall":
+		if err = service.Uninstall(serviceName); err == nil {
+			fmt.Println("Serviço removido.")
+		}
+	case "version":
+		fmt.Println(version)
+	default:
+		err = fmt.Errorf("comando desconhecido %q (use install, uninstall, version ou nada para correr)", cmd)
+	}
+	if err != nil {
+		fatal(err)
+	}
+}
+
+// run starts everything and blocks until ctx is cancelled or an update asks
+// for a restart.
+func run(ctx context.Context, exe, baseDir string) (restart bool, err error) {
+	log, err := logging.New(filepath.Join(baseDir, "logs"))
+	if err != nil {
+		return false, err
+	}
+	store, err := config.Open(baseDir)
+	if err != nil {
+		log.Error("config", "err", err)
+		return false, err
+	}
+	cfg := store.Get()
+	ffmpeg := findFFmpeg(cfg.FFmpegPath, filepath.Dir(exe))
+	log.Info("starting", "version", version, "dir", baseDir, "ffmpeg", ffmpeg)
+
+	rec := recorder.New(ffmpeg, func() (string, string) {
+		return store.Get().Camera.StreamURL(), store.RecordingsDir()
+	}, filepath.Join(baseDir, "recording.state"), log.Logger)
+	rec.CleanupTemp()
+
+	restartCh := make(chan struct{}, 1)
+	upd := updater.New(updater.Options{
+		Repo: repo, Current: version, ExePath: exe, Log: log.Logger,
+		Enabled: func() bool { return store.Get().AutoUpdate },
+		TryLock: rec.TryLock,
+		Unlock:  rec.Unlock,
+		Restart: func() { restartCh <- struct{}{} },
+	})
+	upd.CleanupOld()
+
+	srv := &server.Server{Version: version, FFmpeg: ffmpeg, Store: store, Recorder: rec, Updater: upd, Log: log, Static: web.FS}
+	httpSrv := &http.Server{Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	ln, err := net.Listen("tcp", net.JoinHostPort("", strconv.Itoa(cfg.Port)))
+	if err != nil {
+		log.Error("listen", "err", err)
+		return false, err
+	}
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- httpSrv.Serve(ln) }()
+	log.Info("web interface ready", "url", fmt.Sprintf("http://localhost:%d", cfg.Port))
+
+	bgCtx, cancelBg := context.WithCancel(ctx)
+	defer cancelBg()
+	go upd.Run(bgCtx)
+	go retention(bgCtx, rec, store)
+	rec.Resume()
+
+	select {
+	case <-ctx.Done():
+	case <-restartCh:
+		restart = true
+	case err = <-serveErr:
+		log.Error("http server", "err", err)
+	}
+
+	log.Info("shutting down", "restart", restart)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	httpSrv.Shutdown(shutdownCtx)
+	rec.Shutdown(shutdownCtx)
+	return restart, err
+}
+
+func retention(ctx context.Context, rec *recorder.Recorder, store *config.Store) {
+	t := time.NewTicker(time.Hour)
+	defer t.Stop()
+	for {
+		rec.Prune(store.Get().RetentionDays)
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
+// findFFmpeg prefers the configured path, then ffmpeg next to the exe, then PATH.
+func findFFmpeg(configured, exeDir string) string {
+	if configured != "" {
+		return configured
+	}
+	name := "ffmpeg"
+	if runtime.GOOS == "windows" {
+		name = "ffmpeg.exe"
+	}
+	if local := filepath.Join(exeDir, name); fileExists(local) {
+		return local
+	}
+	if p, err := exec.LookPath("ffmpeg"); err == nil {
+		return p
+	}
+	return name
+}
+
+// reexec starts the (updated) binary again when running in a console.
+func reexec(exe string) error {
+	cmd := exec.Command(exe, os.Args[1:]...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := cmd.Start(); err != nil {
+		return errors.New("atualização instalada, mas não foi possível reiniciar: " + err.Error())
+	}
+	return nil
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
+}
+
+func fatal(err error) {
+	fmt.Fprintln(os.Stderr, "erro:", err)
+	os.Exit(1)
+}

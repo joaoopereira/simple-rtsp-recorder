@@ -1,32 +1,22 @@
-# Node.js
-node_modules/
+# Build output
+dist/
+/simple-rtsp-recorder
+/simple-rtsp-recorder.exe
+*.exe
 
-# Logs
+# Runtime files (when running with -dir . during development)
+config.json
+recording.state
+recordings/
 logs/
 *.log
 
-# Dependency directories
-pids/
-*.pid
-*.seed
-*.pid.lock
-
-# Build output
-dist/
-build/
-out/
-
-# Environment variables
+# Legacy 1.x config
 prod.env
-.env.test
+.env
 
-# IDE files
+# IDE / OS
 .vscode/
 .idea/
-
-# Testing
-coverage/
-
-# Miscellaneous
 .DS_Store
 Thumbs.db

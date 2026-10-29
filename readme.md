@@ -1,86 +1,72 @@
-
 # 🎥 Simple RTSP Recorder
 
+Records an RTSP camera to MP4 files on a Windows PC, controlled from a web page.
+A single executable that runs as a Windows service and **updates itself** from GitHub releases. Updates are only installed when nothing is recording.
 
-This is a simple web server that allows you to record files from an RTSP camera stream. It provides an easy-to-use interface for starting and stopping recordings, as well as managing the recorded files. Perfect for quick camera archiving! 🚦
+- One-click record and stop, with a live camera preview and a timer
+- Recordings list with an in-browser player, download and delete
+- Camera settings in the UI, with a "test connection" button
+- Recordings survive power cuts: files are fragmented MP4 while recording and finalized when stopped
+- Reconnects automatically if the camera drops, and resumes recording after a PC or service restart
+- Optional automatic deletion of old recordings, plus a disk space indicator
+- Logs viewable from the UI
 
+## Install (Windows)
 
-## 🚀 Installation
+Run PowerShell **as Administrator**:
 
-### Quick Install (Windows Production)
-
-**One-liner installation** (Run PowerShell as Administrator):
 ```powershell
 irm https://raw.githubusercontent.com/joaoopereira/simple-rtsp-recorder/development/install.ps1 | iex
 ```
 
-This will:
-- Download the latest release from GitHub
-- Install to the current directory
-- Set up a Windows service
-- Create a default configuration file
+Then open `http://localhost:8080` and set up the camera (⚙️).
 
-After installation:
-1. Edit `prod.env` with your camera settings
-2. The service will be running automatically
-3. Access the web interface at `http://localhost:8080`
+The same command upgrades an existing installation, including 1.x (Node.js) installs. It installs into the existing folder, converts `prod.env` to `config.json` and keeps the recordings. After that, updates are automatic.
 
-### Development Install
+<details>
+<summary>Manual install</summary>
 
-1. 📥 Clone this repository to your local machine
-2. 📦 Install dependencies: `npm install`
-3. 🛠️ Configure the server settings in the `.env` file
-4. ▶️ Start the server: `npm start`
+1. Download `simple-rtsp-recorder-win-x64.zip` from [Releases](https://github.com/joaoopereira/simple-rtsp-recorder/releases) and extract it.
+2. As Administrator: `simple-rtsp-recorder.exe install`
+3. To remove the service: `simple-rtsp-recorder.exe uninstall`
 
-### Manual Windows Installation
+</details>
 
-1. Download the latest release from the [Releases page](https://github.com/joaoopereira/simple-rtsp-recorder/releases)
-2. Extract `simple-rtsp-recorder-win-x64.zip` to your desired location
-3. Edit `prod.env` with your camera settings
-4. Run `Install-Service.ps1` as Administrator to install as a Windows service
-5. Access the web interface at `http://localhost:8080`
+## Configuration
 
+Most settings are edited in the UI and stored in `config.json` next to the executable:
 
-## 🖥️ Usage
+| Key | Description |
+|---|---|
+| `camera.host`, `camera.port`, `camera.path` | RTSP address, e.g. `192.168.1.100`, `554`, `live1.sdp` |
+| `camera.user`, `camera.password` | Credentials (optional). The password is never sent back to the browser |
+| `camera.url` | *(file only)* Full RTSP URL; overrides the fields above |
+| `recordingsDir` | Folder for recordings, relative to the install folder or absolute |
+| `retentionDays` | Delete recordings older than N days (`0` = keep forever) |
+| `autoUpdate` | Install new releases automatically when idle |
+| `title` | Page title |
+| `port` | *(file only)* HTTP port, default `8080`. Restart the service after changing it |
+| `ffmpegPath` | *(file only)* Custom ffmpeg. By default the app uses the `ffmpeg.exe` shipped next to it |
 
-1. 🌐 Open your browser and go to `http://localhost:8080`
-2. 🎬 Click the **Start** button to begin recording from your RTSP camera stream.
-3. ⏹️ Click the **Stop** button to end the recording.
-4. 💾 Your recordings will appear in the list and be saved in the output directory.
+Logs are written to `logs/recorder.log`.
 
+## Releasing
 
-## ⚙️ Configuration
+GitHub → **Actions → Release → Run workflow**, then pick `patch`, `minor` or `major`. This also works from the GitHub mobile app. Installed apps update within the hour, once nothing is recording.
 
+## Development
 
-You can customize the server settings by editing the `.env` file. Here are some of the available options:
-
-* `RTSP_USER` – Username for the RTSP camera stream (optional)
-* `RTSP_PASSWORD` – Password for the RTSP camera stream (optional)
-* `RTSP_IP` – IP address of the RTSP camera
-* `RTSP_PORT` – Port number (usually 554)
-* `RTSP_SDP` – SDP file or stream path (e.g. `live1.sdp`)
-* `OUTPUT_DIR` – Directory where recordings are saved
-
-
-## 🤝 Contributing
-
-Contributions are welcome! If you find any issues or have suggestions for improvements, please open an issue or submit a pull request. 🙏
-
-## 🔧 Building Releases
-
-To create a new release:
+Requires Go and ffmpeg.
 
 ```bash
-# Bump version and create a tag
-npm run bump
-
-# Push the tag to trigger GitHub Actions build
-git push --follow-tags
+go test ./...                              # unit + ffmpeg integration tests
+scripts/fake-camera.sh &                   # fake camera at rtsp://127.0.0.1:8554/live1.sdp
+go run . -dir ./tmp                        # http://localhost:8080
+GOOS=windows go build -o simple-rtsp-recorder.exe .
 ```
 
-This will automatically build the Windows binary and publish it as a GitHub release.
+See [CLAUDE.md](CLAUDE.md) for the architecture.
 
+## License
 
-## 📄 License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more information.
+MIT. See [LICENSE](LICENSE).

@@ -1,21 +1,10 @@
 {
 	"name": "simple-rtsp-recorder",
-	"image": "mcr.microsoft.com/devcontainers/javascript-node",
+	"image": "mcr.microsoft.com/devcontainers/go:1.24",
 	"features": {
 		"ghcr.io/devcontainers/features/github-cli": {},
-		"ghcr.io/devcontainers-extra/features/ffmpeg-apt-get": {},
-		"ghcr.io/stuartleeks/dev-container-features/shell-history": {},
-		"ghcr.io/nils-geistmann/devcontainers-features/zsh": {
-			"theme": "robbyrussell",
-			"plugins": "git history npm"
-		}
+		"ghcr.io/devcontainers-extra/features/ffmpeg-apt-get": {}
 	},
-	"customizations": {
-		"vscode": {
-			"extensions": [
-				"AndyGongea.update-now"
-			]
-		}
-	},
-	"postCreateCommand": "npm ci"
+	"forwardPorts": [8080],
+	"postCreateCommand": "go mod download"
 }

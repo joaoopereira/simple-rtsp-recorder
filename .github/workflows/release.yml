@@ -1,39 +1,94 @@
-name: Build and Release
+name: Release
+
+# Run from GitHub (Actions → Release → Run workflow, also works from the
+# GitHub mobile app) choosing patch/minor/major, or push a vX.Y.Z tag.
+# Installed apps pick up the new release automatically within an hour, as
+# soon as nothing is recording.
 
 on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump
+        type: choice
+        options: [patch, minor, major]
+        default: patch
   push:
-    tags:
-      - 'v*'
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  # LGPL build is enough: we only stream-copy, never encode.
+  FFMPEG_URL: https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-win64-lgpl-7.1.zip
 
 jobs:
-  build-and-release:
-    runs-on: windows-latest
-    
+  release:
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-      
-      - name: Install dependencies
-        run: npm ci
-      
-      - name: Build
-        run: npm run pack
-      
-      - name: Create release archive
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install ffmpeg (used by recorder tests)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
+      - name: Test
+        run: go test ./...
+
+      - name: Compute version
+        id: version
         run: |
-          cd dist
-          Compress-Archive -Path * -DestinationPath ../simple-rtsp-recorder-win-x64.zip
-      
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            v="${GITHUB_REF_NAME}"
+          else
+            last=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)
+            IFS=. read -r major minor patch <<< "${last#v}"
+            major=${major:-0}; minor=${minor:-0}; patch=${patch:-0}
+            case "${{ inputs.bump }}" in
+              major) v="v$((major + 1)).0.0" ;;
+              minor) v="v${major}.$((minor + 1)).0" ;;
+              *)     v="v${major}.${minor}.$((patch + 1))" ;;
+            esac
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "Releasing $v"
+
+      - name: Build
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p dist/pkg
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath \
+            -ldflags "-s -w -X main.version=${VERSION}" \
+            -o dist/simple-rtsp-recorder.exe .
+
+      - name: Bundle ffmpeg
+        run: |
+          curl -fsSL -o ffmpeg.zip "$FFMPEG_URL"
+          unzip -q ffmpeg.zip -d ffmpeg
+          cp "$(find ffmpeg -name ffmpeg.exe | head -1)" dist/pkg/ffmpeg.exe
+          cp "$(find ffmpeg -name LICENSE.txt | head -1)" dist/pkg/FFMPEG-LICENSE.txt || true
+
+      - name: Package
+        run: |
+          cp dist/simple-rtsp-recorder.exe LICENSE install.ps1 dist/pkg/
+          (cd dist/pkg && zip -q -r ../simple-rtsp-recorder-win-x64.zip .)
+          (cd dist && sha256sum simple-rtsp-recorder.exe simple-rtsp-recorder-win-x64.zip > checksums.txt)
+          cat dist/checksums.txt
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
         with:
-          files: simple-rtsp-recorder-win-x64.zip
+          tag_name: ${{ steps.version.outputs.version }}
+          target_commitish: ${{ github.sha }}
           generate_release_notes: true
-          draft: false
-          prerelease: false
+          files: |
+            dist/simple-rtsp-recorder.exe
+            dist/simple-rtsp-recorder-win-x64.zip
+            dist/checksums.txt

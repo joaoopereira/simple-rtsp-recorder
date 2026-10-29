@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="pt">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Simple RTSP Recorder</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="icon.svg" alt="" width="28" height="28">
+      <h1 id="title">Simple RTSP Recorder</h1>
+    </div>
+    <div class="topbar-actions">
+      <span id="pill" class="pill">—</span>
+      <button id="settingsBtn" class="icon-btn" title="Definições" aria-label="Definições">
+        <svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="card camera">
+      <div class="preview">
+        <img id="preview" alt="Imagem da câmara" hidden>
+        <div id="previewEmpty" class="preview-empty">Sem imagem da câmara</div>
+        <span id="recBadge" class="rec-badge" hidden>● REC</span>
+      </div>
+
+      <div id="setupNotice" class="notice" hidden>
+        <p>A câmara ainda não está configurada.</p>
+        <button class="btn primary" data-open-settings>Configurar câmara</button>
+      </div>
+
+      <div class="controls">
+        <button id="recordBtn" class="record-btn" aria-label="Gravar">
+          <span class="record-icon"></span>
+        </button>
+        <div class="control-text">
+          <div id="stateText" class="state-text">A carregar…</div>
+          <div id="timer" class="timer">00:00:00</div>
+          <div id="stateError" class="state-error" hidden></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card recordings">
+      <div class="card-head">
+        <h2>Gravações</h2>
+        <span id="recCount" class="muted"></span>
+      </div>
+      <ul id="recList" class="rec-list"></ul>
+      <p id="recEmpty" class="muted empty" hidden>Ainda não há gravações.</p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div id="disk" class="disk" hidden>
+      <div class="disk-bar"><span id="diskFill"></span></div>
+      <span id="diskText" class="muted"></span>
+    </div>
+    <div class="footer-meta">
+      <span id="version" class="muted"></span>
+      <span id="updateText" class="muted"></span>
+      <button id="updateBtn" class="link-btn">Verificar atualizações</button>
+      <button id="logsBtn" class="link-btn">Registos</button>
+    </div>
+  </footer>
+
+  <dialog id="playerDlg" class="dlg wide">
+    <div class="dlg-head"><h3 id="playerTitle"></h3><button class="icon-btn" data-close aria-label="Fechar">✕</button></div>
+    <video id="player" controls playsinline preload="metadata"></video>
+  </dialog>
+
+  <dialog id="confirmDlg" class="dlg">
+    <form method="dialog">
+      <h3>Apagar gravação?</h3>
+      <p id="confirmText" class="muted"></p>
+      <div class="dlg-actions">
+        <button value="cancel" class="btn">Cancelar</button>
+        <button value="ok" class="btn danger">Apagar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="settingsDlg" class="dlg">
+    <form id="settingsForm">
+      <div class="dlg-head"><h3>Definições</h3><button type="button" class="icon-btn" data-close aria-label="Fechar">✕</button></div>
+      <fieldset>
+        <legend>Câmara</legend>
+        <div class="grid2">
+          <label>Endereço IP<input name="host" placeholder="192.168.1.100" required></label>
+          <label>Porta<input name="port" type="number" min="1" max="65535" value="554" required></label>
+        </div>
+        <label>Caminho do stream<input name="path" placeholder="live1.sdp"></label>
+        <div class="grid2">
+          <label>Utilizador<input name="user" autocomplete="off"></label>
+          <label>Palavra-passe<input name="password" type="password" autocomplete="new-password"></label>
+        </div>
+        <div class="test-row">
+          <button type="button" id="testBtn" class="btn">Testar ligação</button>
+          <span id="testResult" class="muted"></span>
+        </div>
+        <img id="testImg" class="test-img" alt="" hidden>
+      </fieldset>
+      <fieldset>
+        <legend>Gravações</legend>
+        <label>Pasta<input name="recordingsDir" required></label>
+        <label>Apagar gravações com mais de (dias, 0 = nunca)<input name="retentionDays" type="number" min="0" value="0"></label>
+      </fieldset>
+      <fieldset>
+        <legend>Geral</legend>
+        <label>Título<input name="title"></label>
+        <label class="check"><input name="autoUpdate" type="checkbox"> Atualizar automaticamente (só quando não há gravações)</label>
+      </fieldset>
+      <p id="settingsError" class="state-error" hidden></p>
+      <div class="dlg-actions">
+        <button type="button" class="btn" data-close>Cancelar</button>
+        <button type="submit" class="btn primary">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="logsDlg" class="dlg wide">
+    <div class="dlg-head"><h3>Registos</h3><button class="icon-btn" data-close aria-label="Fechar">✕</button></div>
+    <pre id="logs" class="logs"></pre>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>
