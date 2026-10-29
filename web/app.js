@@ -23,6 +23,8 @@ let status = null;
 let listKey = "";
 let timerStart = null;
 let pending = false;
+let loadedVersion = null; // version that served this page
+let updating = null;      // while an update installs: {version, since}
 
 // ---------- API ----------
 
@@ -82,15 +84,61 @@ function recordingDate(rec) {
 // ---------- Status ----------
 
 async function refreshStatus() {
+  let s;
   try {
-    status = await api("GET", "/api/status");
+    s = await api("GET", "/api/status");
   } catch {
+    // The app is down for a moment while it restarts with a new version.
+    if (status && ["waiting", "applying"].includes(status.update.state)) showUpdating(status.update.latest);
+    if (updating) return renderUpdating();
     $("pill").textContent = "Sem ligação";
     $("pill").className = "pill busy";
     return;
   }
+  // A new version is running: reload to get its page and assets.
+  if (loadedVersion === null) loadedVersion = s.version;
+  if (s.version !== loadedVersion) {
+    showUpdating(s.version);
+    $("updateOverlayText").textContent = `Versão ${s.version} instalada. A recarregar…`;
+    location.reload();
+    return;
+  }
+  status = s;
+  if (status.update.state === "applying") showUpdating(status.update.latest);
+  else if (updating) hideUpdating(); // the install failed and the old version kept running
   renderStatus();
 }
+
+// ---------- Update overlay ----------
+
+const UPDATE_SLOW = 3 * 60 * 1000;
+
+function showUpdating(version) {
+  if (!updating) {
+    updating = { version, since: Date.now() };
+    document.querySelectorAll("dialog[open]").forEach((d) => d.close());
+    for (const el of document.querySelectorAll("body > header, body > main, body > footer")) el.inert = true;
+    $("updateOverlay").hidden = false;
+  }
+  renderUpdating();
+}
+
+function hideUpdating() {
+  updating = null;
+  for (const el of document.querySelectorAll("body > header, body > main, body > footer")) el.inert = false;
+  $("updateOverlay").hidden = true;
+}
+
+function renderUpdating() {
+  const slow = Date.now() - updating.since > UPDATE_SLOW;
+  const v = updating.version ? ` a versão ${updating.version}` : " a nova versão";
+  $("updateOverlayText").textContent = slow
+    ? "A atualização está a demorar mais do que o esperado. A página recarrega sozinha quando o gravador voltar."
+    : `A instalar${v} e a reiniciar o gravador. A página recarrega sozinha quando terminar.`;
+  $("updateReloadBtn").hidden = !slow;
+}
+
+$("updateReloadBtn").addEventListener("click", () => location.reload());
 
 function renderStatus() {
   const r = status.recorder;
@@ -473,7 +521,7 @@ document.addEventListener("visibilitychange", () => {
 
 setInterval(renderTimer, 500);
 setInterval(() => { if (!document.hidden) refreshStatus(); }, STATUS_INTERVAL);
-setInterval(refreshSnapshot, SNAPSHOT_INTERVAL);
+setInterval(() => { if (!updating) refreshSnapshot(); }, SNAPSHOT_INTERVAL);
 setInterval(() => { if (!document.hidden) loadRecordings(); }, 60000);
 refreshStatus().then(refreshSnapshot);
 refreshAdmin();

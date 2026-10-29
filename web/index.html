@@ -147,6 +147,15 @@
     <pre id="logs" class="logs"></pre>
   </dialog>
 
+  <div id="updateOverlay" class="update-overlay" role="alertdialog" aria-modal="true" aria-labelledby="updateOverlayTitle" aria-busy="true" hidden>
+    <div class="update-box">
+      <div class="spinner" aria-hidden="true"></div>
+      <h3 id="updateOverlayTitle">A atualizar…</h3>
+      <p id="updateOverlayText" class="muted"></p>
+      <button id="updateReloadBtn" class="btn" hidden>Recarregar página</button>
+    </div>
+  </div>
+
   <div id="toast" class="toast" hidden></div>
   <script src="app.js"></script>
 </body>
