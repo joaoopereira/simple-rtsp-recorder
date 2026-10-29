@@ -2,9 +2,12 @@ package recorder
 
 import (
 	"bytes"
+	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -79,6 +82,17 @@ func TestRecordStopAndFinalize(t *testing.T) {
 		t.Fatalf("current recording should not be listed: %+v", list)
 	}
 
+	// The preview comes from the recording itself, not a second connection.
+	waitFor(t, "live preview frame", func() bool {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		return r.liveFrame != nil
+	})
+	snap, err := r.Snapshot(context.Background())
+	if err != nil || !bytes.HasPrefix(snap, []byte{0xff, 0xd8}) {
+		t.Fatalf("Snapshot while recording = %d bytes, %v; want a JPEG", len(snap), err)
+	}
+
 	time.Sleep(2 * time.Second)
 	if err := r.Stop(); err != nil {
 		t.Fatal(err)
@@ -103,6 +117,20 @@ func TestRecordStopAndFinalize(t *testing.T) {
 	if bytes.Contains(data, []byte("moof")) {
 		t.Error("finalized file is still fragmented")
 	}
+	// Decoding only keyframes for the preview must not drop frames from the file.
+	out, err := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error", "-i", filepath.Join(dir, list[0].Name),
+		"-map", "0:v", "-c", "copy", "-f", "framecrc", "-").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st, ok := parseFrameCRC(bytes.NewReader(out)); !ok || st.FPS < 24 || st.FPS > 26 || st.Gaps != 0 {
+		t.Errorf("recorded video stats = %+v, want 25 fps without gaps", st)
+	}
+	r.mu.Lock()
+	if r.liveFrame != nil {
+		t.Error("live preview frame kept after the session ended")
+	}
+	r.mu.Unlock()
 	if _, err := os.Stat(filepath.Join(dir, "state.json")); !os.IsNotExist(err) {
 		t.Error("state file should be removed after a user stop")
 	}
@@ -134,6 +162,36 @@ func TestStopWithoutRecording(t *testing.T) {
 	r, _ := newTestRecorder(t, "rtsp://127.0.0.1:1/x")
 	if err := r.Stop(); err != ErrNotRecording {
 		t.Fatalf("Stop = %v, want ErrNotRecording", err)
+	}
+}
+
+func TestParseFrameCRC(t *testing.T) {
+	// 15 fps (6000 ticks of 1/90000 s), a keyframe every 15 frames, and one
+	// 1 s hiccup after frame 30.
+	var b strings.Builder
+	b.WriteString("#tb 0: 1/90000\n#media_type 0: video\n")
+	dts := int64(0)
+	for i := 0; i < 60; i++ {
+		flags := ", F=0x0"
+		if i%15 == 0 {
+			flags = ""
+		}
+		fmt.Fprintf(&b, "0, %d, %d, 6000, 1000, 0x00000000%s\n", dts, dts, flags)
+		dts += 6000
+		if i == 30 {
+			dts += 90000
+		}
+	}
+	st, ok := parseFrameCRC(strings.NewReader(b.String()))
+	if !ok {
+		t.Fatal("no stats")
+	}
+	if st.Frames != 60 || st.Gaps != 1 || st.MaxGap.Round(time.Millisecond) != 1067*time.Millisecond ||
+		st.Lost.Round(time.Millisecond) != time.Second || st.KeyframeEvery.Round(time.Millisecond) != 1233*time.Millisecond {
+		t.Errorf("stats = %+v", st)
+	}
+	if _, ok := parseFrameCRC(strings.NewReader("#tb 0: 1/90000\n")); ok {
+		t.Error("stats from an empty listing")
 	}
 }
 

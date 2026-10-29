@@ -24,6 +24,7 @@ Cloudflare Access may block automated requests. If it does, ask the user to past
 | `não foi possível ligar à câmara: ...` | The camera IP, path or credentials, or the camera is offline. "Testar ligação" in the settings (admin login needed) shows the ffmpeg error. |
 | Stuck in `reconnecting` | The camera or network is dropping. The stall detector (`stallTimeout`) and the `-timeout` input option are in `recorder.go`. |
 | Recording plays badly or can't seek | Finalization failed. Look for "finalize failed" in the logs: the file stays fragmented MP4, which is still playable. |
+| Video has hiccups (freezes, jumps) | The `recording stats` log line written when each file is finalized: `fps` below the camera's setting or `gaps` > 0 means the camera skipped frames, usually because its Wi-Fi can't keep up with `kbps`. Fix it on the camera (lower bitrate, constant bitrate) or the Wi-Fi, not in ffmpeg. |
 | Update not applied | `update.state` is `waiting` while recording or finalizing (expected). On `error`, the message says why. A `dev` version never updates. |
 | "palavra-passe de administrador não definida" | No admin password yet. Run `install.ps1` again on the PC, or `set-admin-password` there. It can't be set remotely, by design. |
 | Admin locked out ("demasiadas tentativas") | 5 failed logins from that IP. Wait 15 minutes, or restart the service. |
