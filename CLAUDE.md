@@ -58,7 +58,7 @@ To run the app against the fake camera, see `.claude/skills/run-app/SKILL.md`.
 
 ## Conventions
 
-- Conventional commits (`feat:`, `fix:`, `chore:` …). The default branch is `development`. `CHANGELOG.md` and the release notes are generated from `feat`/`fix`/`perf` subjects and `BREAKING CHANGE:` footers by `scripts/changelog.py` during the release. Don't edit `CHANGELOG.md` by hand for new versions.
+- Conventional commits (`feat:`, `fix:`, `chore:` …). The default branch is `development`. `CHANGELOG.md` and the release notes are generated during the release by git-cliff (`cliff.toml`), from `feat`/`fix`/`perf`/`chore(deps)` subjects and `BREAKING CHANGE:` footers. Don't edit `CHANGELOG.md` by hand for new versions.
 - Prefer the standard library. Don't add a frontend framework or build step.
 - The recorder's state machine is `idle → connecting → recording ⇄ reconnecting → stopping → idle`. All state lives under `Recorder.mu`. Don't call ffmpeg while holding the lock.
 - Never log credentials: use `config.Redact(url)`. The camera password is write-only in the API: `GET /api/settings` returns `hasPassword`, and `PUT` keeps the stored password when `password` is absent.

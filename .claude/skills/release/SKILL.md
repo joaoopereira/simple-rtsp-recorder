@@ -21,7 +21,7 @@ finalized**. The Windows service then restarts on the new version.
 
 ## Changelog
 
-The workflow writes the new `CHANGELOG.md` section from the conventional commits since the last tag (`scripts/changelog.py`). It commits it to `development` as `chore(release): X.Y.Z`, and uses the same text as the release notes. Only `feat`, `fix`, `perf` and breaking changes are listed, so write commit subjects for humans. Run `git pull` after a release, because the workflow pushed a commit. To preview the next section: `python3 -I scripts/changelog.py vX.Y.Z`.
+The workflow generates the new section with [git-cliff](https://git-cliff.org) (config: `cliff.toml`, pinned to 2.14.2 in `release.yml`) from the conventional commits since the last tag. It inserts the section below the `CHANGELOG.md` header, commits it to `development` as `chore(release): X.Y.Z`, and uses the same text as the release notes. Only `feat`, `fix`, `perf`, `chore(deps)` and breaking changes are listed, so write commit subjects for humans. Run `git pull` after a release, because the workflow pushed a commit. To preview the next section: `pip install git-cliff==2.14.2`, then `git cliff --unreleased --tag vX.Y.Z --strip all`.
 
 ## If the release fails
 

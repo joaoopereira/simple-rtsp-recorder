@@ -55,24 +55,30 @@ jobs:
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "Releasing $v"
 
-      # Commits the new CHANGELOG.md section to the branch (not when run
-      # from a tag push) and uses it as the release notes.
+      # git-cliff (config: cliff.toml) writes the release notes; on a branch
+      # run they are also inserted below the CHANGELOG.md header and
+      # committed, and the release is tagged on that commit.
       - name: Update CHANGELOG.md
         id: changelog
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          NOTES: ${{ runner.temp }}/release-notes.md
         run: |
-          python3 -I scripts/changelog.py "$VERSION" > "$RUNNER_TEMP/release-notes.md"
-          if [ "${GITHUB_REF_TYPE}" = "branch" ]; then
-            python3 -I scripts/changelog.py "$VERSION" --update CHANGELOG.md > /dev/null
+          pip install --quiet git-cliff==2.14.2
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then range="--latest"; else range="--unreleased --tag $VERSION"; fi
+          # Drop trailing blank lines.
+          git cliff $range --strip all | awk 'NF { while (b-- > 0) print ""; b = 0; print; next } { b++ }' > "$NOTES"
+          cat "$NOTES"
+          if [ "${GITHUB_REF_TYPE}" = "branch" ] && ! grep -qF "## [${VERSION#v}]" CHANGELOG.md; then
+            awk -v notes="$NOTES" '!done && /^## \[/ { while ((getline line < notes) > 0) print line; print ""; done = 1 } { print }' \
+              CHANGELOG.md > "$RUNNER_TEMP/CHANGELOG.md" && mv "$RUNNER_TEMP/CHANGELOG.md" CHANGELOG.md
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add CHANGELOG.md
-            git diff --cached --quiet || git commit -q -m "chore(release): ${VERSION#v}"
+            git commit -q -m "chore(release): ${VERSION#v}"
             git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          cat "$RUNNER_TEMP/release-notes.md"
 
       - name: Build
         env:
