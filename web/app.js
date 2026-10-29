@@ -23,6 +23,9 @@ let status = null;
 let listKey = "";
 let timerStart = null;
 let pending = false;
+const REC_PAGE = 5;
+let recShown = REC_PAGE; // recordings listed; "Ver mais" adds REC_PAGE
+let recordings = [];
 let loadedVersion = null; // version that served this page
 let updating = null;      // while an update installs: {version, since}
 
@@ -245,12 +248,26 @@ async function loadRecordings() {
     toast("Erro ao carregar gravações: " + e.message, true);
     return;
   }
-  const ul = $("recList");
-  ul.replaceChildren(...list.map(renderRecording));
+  recordings = list;
+  renderRecordings();
+}
+
+// The list shows REC_PAGE recordings at a time, so the page has one scroll.
+function renderRecordings() {
+  const list = recordings;
+  $("recList").replaceChildren(...list.slice(0, recShown).map(renderRecording));
   $("recEmpty").hidden = list.length > 0;
   const total = list.reduce((s, r) => s + r.size, 0);
   $("recCount").textContent = list.length ? `${list.length} · ${fmtBytes(total)}` : "";
+  const rest = list.length - recShown;
+  $("recMore").hidden = rest <= 0;
+  $("recMore").textContent = `Ver mais (${rest})`;
 }
+
+$("recMore").addEventListener("click", () => {
+  recShown += REC_PAGE;
+  renderRecordings();
+});
 
 const ICONS = {
   play: '<svg viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5-12-7.5Z"/></svg>',
@@ -285,7 +302,7 @@ function renderRecording(rec) {
     name.append(tag);
   }
   const meta = document.createElement("div");
-  meta.className = "muted";
+  meta.className = "muted rec-meta";
   meta.textContent = `${rec.name} · ${fmtBytes(rec.size)}`;
   info.append(name, meta);
 

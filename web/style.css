@@ -132,7 +132,7 @@ h3 { font-size: 1rem; }
 .state-error { color: var(--danger); font-size: .875rem; margin: 4px 0 0; overflow-wrap: anywhere; }
 
 /* Recordings */
-.rec-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 70vh; overflow-y: auto; }
+.rec-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .rec-item {
   display: flex; align-items: center; gap: 10px;
   padding: 10px; border-radius: 10px;
@@ -142,6 +142,10 @@ h3 { font-size: 1rem; }
 .rec-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rec-actions { display: flex; gap: 2px; flex: none; }
 .tag { font-size: .7rem; font-weight: 600; color: var(--warn); margin-left: 6px; }
+.rec-more { display: block; width: 100%; margin-top: 8px; }
+.rec-more[hidden] { display: none; }
+/* Phones: date and buttons only. */
+@media (max-width: 600px) { .rec-meta { display: none; } }
 .empty { text-align: center; padding: 24px 0; }
 
 /* Buttons */
