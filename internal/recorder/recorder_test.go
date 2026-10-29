@@ -233,6 +233,12 @@ func TestParseFrameCRC(t *testing.T) {
 		st.Lost.Round(time.Millisecond) != time.Second || st.KeyframeEvery.Round(time.Millisecond) != 1217*time.Millisecond {
 		t.Errorf("stats = %+v", st)
 	}
+	if len(st.GapList) != 1 || st.GapList[0].At.Round(time.Millisecond) != 2*time.Second {
+		t.Errorf("gap list = %+v, want one gap at 2s", st.GapList)
+	}
+	if got := formatGaps([]Gap{{At: 192 * time.Second, Length: 1030 * time.Millisecond}, {At: 3723 * time.Second, Length: 360 * time.Millisecond}}); got != "03:12(1.03s) 1:02:03(0.36s)" {
+		t.Errorf("formatGaps = %q", got)
+	}
 	if _, ok := parseFrameCRC(strings.NewReader("#tb 0: 1/90000\n")); ok {
 		t.Error("stats from an empty listing")
 	}

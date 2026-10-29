@@ -542,7 +542,8 @@ func (r *Recorder) finalize(path string) error {
 	if st, ok := parseFrameCRC(&stdout); ok {
 		r.log.Info("recording stats", "file", filepath.Base(path), "duration", st.Duration.Round(time.Second).String(),
 			"fps", fmt.Sprintf("%.1f", st.FPS), "kbps", st.Kbps, "keyframeEvery", st.KeyframeEvery.Round(100*time.Millisecond).String(),
-			"gaps", st.Gaps, "maxGap", st.MaxGap.Round(10*time.Millisecond).String(), "lost", st.Lost.Round(100*time.Millisecond).String())
+			"gaps", st.Gaps, "maxGap", st.MaxGap.Round(10*time.Millisecond).String(), "lost", st.Lost.Round(100*time.Millisecond).String(),
+			"gapsAt", formatGaps(st.GapList))
 	}
 	return nil
 }
@@ -559,6 +560,30 @@ type Stats struct {
 	Gaps          int
 	MaxGap        time.Duration
 	Lost          time.Duration
+	GapList       []Gap // the first maxGapList gaps
+}
+
+// Gap is a pause of Length that starts At into the recording.
+type Gap struct {
+	At, Length time.Duration
+}
+
+// maxGapList limits how many gaps are listed in the log line.
+const maxGapList = 30
+
+// formatGaps lists gaps as "03:12(1.03s) 11:40(0.36s)", with times from the
+// start of the file so they can be found in the video.
+func formatGaps(gaps []Gap) string {
+	parts := make([]string, 0, len(gaps))
+	for _, g := range gaps {
+		sec := int(g.At / time.Second)
+		at := fmt.Sprintf("%02d:%02d", sec/60, sec%60)
+		if sec >= 3600 {
+			at = fmt.Sprintf("%d:%02d:%02d", sec/3600, sec/60%60, sec%60)
+		}
+		parts = append(parts, fmt.Sprintf("%s(%.2fs)", at, g.Length.Seconds()))
+	}
+	return strings.Join(parts, " ")
 }
 
 // minGap is the shortest pause counted as a gap, whatever the frame rate.
@@ -612,8 +637,11 @@ func parseFrameCRC(r io.Reader) (Stats, bool) {
 	limit := max(3*usual, minGap)
 
 	st := Stats{Frames: len(dts), Duration: dts[len(dts)-1] - dts[1]}
-	for _, d := range deltas {
+	for i, d := range deltas {
 		if d > limit {
+			if len(st.GapList) < maxGapList {
+				st.GapList = append(st.GapList, Gap{At: dts[i+1] - dts[0], Length: d})
+			}
 			st.Gaps++
 			st.Lost += d - usual
 			st.MaxGap = max(st.MaxGap, d)
