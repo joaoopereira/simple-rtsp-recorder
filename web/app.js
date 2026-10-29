@@ -423,7 +423,7 @@ $("testBtn").addEventListener("click", async () => {
 $("logsBtn").addEventListener("click", async () => {
   try {
     const lines = await api("GET", "/api/logs");
-    $("logs").textContent = lines.join("\n") || "(vazio)";
+    $("logs").textContent = (lines || []).join("\n") || "(vazio)";
     $("logsDlg").showModal();
     $("logs").scrollTop = $("logs").scrollHeight;
   } catch (e) {

@@ -24,8 +24,10 @@ type Logger struct {
 }
 
 // New creates a logger writing to dir/recorder.log (rotated to
-// recorder.log.1), to stdout and to memory.
-func New(dir string) (*Logger, error) {
+// recorder.log.1), to memory and to stdout.
+func New(dir string) (*Logger, error) { return newLogger(dir, os.Stdout) }
+
+func newLogger(dir string, stdout io.Writer) (*Logger, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
@@ -34,9 +36,22 @@ func New(dir string) (*Logger, error) {
 		return nil, err
 	}
 	t := &tail{}
-	w := io.MultiWriter(file, os.Stdout, t)
+	w := allWriters{file, t, stdout}
 	h := slog.NewTextHandler(w, &slog.HandlerOptions{Level: slog.LevelInfo})
 	return &Logger{Logger: slog.New(h), tail: t}, nil
+}
+
+// allWriters writes to every writer even when one fails. io.MultiWriter
+// stops at the first error, and a Windows service has no console, so
+// writing to stdout fails there: the lines then never reached the
+// in-memory tail and /api/logs was empty.
+type allWriters []io.Writer
+
+func (ws allWriters) Write(p []byte) (int, error) {
+	for _, w := range ws {
+		w.Write(p)
+	}
+	return len(p), nil
 }
 
 // Discard returns a logger that drops everything (for tests).
@@ -67,7 +82,7 @@ func (t *tail) Write(p []byte) (int, error) {
 func (t *tail) lines() []string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return append([]string(nil), t.buf...)
+	return append([]string{}, t.buf...) // never nil: JSON [] rather than null
 }
 
 type rotatingFile struct {
