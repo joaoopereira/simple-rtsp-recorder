@@ -12,7 +12,7 @@ Nobody can easily go to the PC, so start from what the app exposes remotely.
 Ask the user for the following, or fetch it yourself if the sandbox can reach the site. Only use the read-only `GET` endpoints, and never start, stop or delete anything in production.
 
 - `https://futsal.retorta.com/api/status`: recorder state, last error, version, update state, free disk.
-- `https://futsal.retorta.com/api/logs`: the last 500 log lines (ffmpeg errors are prefixed `ffmpeg:`). In the UI, this is the "Registos" link in the footer.
+- The logs: the last 500 log lines (ffmpeg errors are prefixed `ffmpeg:`). They are admin-only (`GET /api/logs` returns 401 without a session), so ask the user to log in and paste them from the "Logs" link in the footer.
 - `https://futsal.retorta.com/api/recordings`: file sizes. A tiny file usually means the camera dropped.
 
 Cloudflare Access may block automated requests. If it does, ask the user to paste the output.
@@ -23,6 +23,7 @@ Cloudflare Access may block automated requests. If it does, ask the user to past
 |---|---|
 | `não foi possível ligar à câmara: ...` | The camera IP, path or credentials, or the camera is offline. "Testar ligação" in the settings (admin login needed) shows the ffmpeg error. |
 | Stuck in `reconnecting` | The camera or network is dropping. The stall detector (`stallTimeout`) and the `-timeout` input option are in `recorder.go`. |
+| `Malformed AAC bitstream` / `dimensions not set` in the logs | Camera stream quirks (ADTS audio, long keyframe interval). Handled by `-bsf:a aac_adtstoasc` and the larger `-analyzeduration` in `recorder.go`. |
 | Recording plays badly or can't seek | Finalization failed. Look for "finalize failed" in the logs: the file stays fragmented MP4, which is still playable. |
 | Update not applied | `update.state` is `waiting` while recording or finalizing (expected). On `error`, the message says why. A `dev` version never updates. |
 | "palavra-passe de administrador não definida" | No admin password yet. Run `install.ps1` again on the PC, or `set-admin-password` there. It can't be set remotely, by design. |

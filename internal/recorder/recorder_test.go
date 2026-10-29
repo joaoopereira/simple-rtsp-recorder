@@ -115,6 +115,49 @@ func TestRecordStopAndFinalize(t *testing.T) {
 	r.Unlock()
 }
 
+// TestRecordCameraQuirks covers what the real camera (DCS-2530L) sends: AAC
+// with ADTS headers, and a stream joined mid-GOP with a keyframe interval
+// longer than ffmpeg's default probe (10 s here).
+func TestRecordCameraQuirks(t *testing.T) {
+	ffmpeg := requireFFmpeg(t)
+	full := filepath.Join(t.TempDir(), "full.ts")
+	out, err := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", "testsrc=size=320x240:rate=25", "-f", "lavfi", "-i", "sine", "-t", "30",
+		"-c:v", "libx264", "-g", "250", "-x264opts", "no-scenecut", "-pix_fmt", "yuv420p",
+		"-c:a", "aac", full).CombinedOutput()
+	if err != nil {
+		t.Fatalf("creating test source: %v\n%s", err, out)
+	}
+	data, err := os.ReadFile(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Start 1 s in (aligned to a 188-byte TS packet), well before the next keyframe.
+	src := filepath.Join(t.TempDir(), "camera.ts")
+	if err := os.WriteFile(src, data[len(data)/30/188*188:], 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, _ := newTestRecorder(t, src)
+	r.connectTimeout = 20 * time.Second
+	if err := r.Start(); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "recording", func() bool {
+		s := r.Status()
+		if s.State == StateIdle {
+			t.Fatalf("recording failed: %s", s.Error)
+		}
+		return s.State == StateRecording
+	})
+	time.Sleep(time.Second)
+	if s := r.Status(); s.State != StateRecording {
+		t.Fatalf("state = %s (%s), want recording", s.State, s.Error)
+	}
+	r.Stop()
+	waitFor(t, "idle", func() bool { return r.Status().State == StateIdle })
+}
+
 func TestConnectionFailureReportsError(t *testing.T) {
 	r, dir := newTestRecorder(t, "rtsp://127.0.0.1:1/nothing")
 	if err := r.Start(); err != nil {

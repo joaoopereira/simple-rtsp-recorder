@@ -534,19 +534,27 @@ func SnapshotURL(ctx context.Context, ffmpeg, url string) ([]byte, error) {
 func recordArgs(url, path string) []string {
 	args := []string{"-hide_banner", "-nostats", "-loglevel", "error"}
 	args = append(args, inputArgs(url)...)
+	// aac_adtstoasc: some cameras (D-Link DCS-2530L) send AAC with ADTS
+	// headers, which the MP4 muxer rejects on the first audio packet. The
+	// filter leaves plain AAC untouched.
 	return append(args, "-i", url,
-		"-map", "0:v", "-map", "0:a?", "-c", "copy",
+		"-map", "0:v", "-map", "0:a?", "-c", "copy", "-bsf:a", "aac_adtstoasc",
 		"-f", "mp4", "-movflags", "+frag_keyframe+empty_moov+default_base_moof",
 		"-y", path)
 }
 
 func inputArgs(url string) []string {
+	// ffmpeg needs a keyframe to learn the video size. Joining the stream
+	// mid-GOP with the default 5 s probe fails with "dimensions not set"
+	// when the camera's keyframe interval is longer (common at night). Probing
+	// stops as soon as everything is known, so a bigger limit costs nothing.
+	args := []string{"-analyzeduration", "20000000", "-probesize", "50000000"}
 	if strings.HasPrefix(url, "rtsp://") || strings.HasPrefix(url, "rtsps://") {
 		// -timeout (µs) makes ffmpeg exit when the camera stops sending.
-		return []string{"-rtsp_transport", "tcp", "-timeout", "10000000"}
+		return append(args, "-rtsp_transport", "tcp", "-timeout", "10000000")
 	}
 	// Local files (tests): read at native speed like a live stream.
-	return []string{"-re"}
+	return append(args, "-re")
 }
 
 func (r *Recorder) persist(recording bool) {
