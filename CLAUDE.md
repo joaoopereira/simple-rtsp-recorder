@@ -76,8 +76,8 @@ To run the app against the fake camera, see `.claude/skills/run-app/SKILL.md`.
 
 ## Security model
 
-- **Admin-only: settings.** `GET/PUT /api/settings`, `POST /api/settings/test` and `PUT /api/admin/password` are wrapped in `requireAdmin` (`internal/server/auth.go`). Every new endpoint that changes configuration or exposes secrets must be wrapped too.
-- **Public: everything else** (record/stop, list/play/download/delete recordings, logs, update check). Anyone who reaches https://futsal.retorta.com can use it, so Cloudflare Access is recommended in front of it.
+- **Admin-only: settings and logs.** `GET/PUT /api/settings`, `POST /api/settings/test`, `PUT /api/admin/password` and `GET /api/logs` are wrapped in `requireAdmin` (`internal/server/auth.go`). Every new endpoint that changes configuration or exposes secrets must be wrapped too. The "Logs" link in the footer only shows while logged in.
+- **Public: everything else** (record/stop, list/play/download/delete recordings, update check). Anyone who reaches https://futsal.retorta.com can use it, so Cloudflare Access is recommended in front of it.
 - The admin password is stored in `config.json` as a PBKDF2-SHA256 hash (`adminPasswordHash`). It is **never** set from the UI without being logged in, because the site is public and the first visitor would become admin. It is set on the PC, either by `install.ps1` (which prompts when none exists) or with `echo <pw> | simple-rtsp-recorder.exe set-admin-password`. Once logged in, it can be changed in the UI.
 - Sessions use an HMAC-signed cookie (`srr_admin`, HttpOnly, SameSite=Strict, Secure behind the tunnel). The key is random per process, so a restart or update logs everyone out. Changing the password invalidates other sessions.
 - Failed logins are locked out per IP: 5 failures in 15 minutes. The IP comes from `Cf-Connecting-Ip`, trusted only when the connection comes from loopback (cloudflared).

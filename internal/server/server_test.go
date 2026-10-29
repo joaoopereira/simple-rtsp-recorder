@@ -187,6 +187,7 @@ func TestSettingsRequireAdmin(t *testing.T) {
 	anon := client()
 	for _, r := range []struct{ method, path string }{
 		{"GET", "/api/settings"}, {"PUT", "/api/settings"}, {"POST", "/api/settings/test"}, {"PUT", "/api/admin/password"},
+		{"GET", "/api/logs"},
 	} {
 		if resp, _ := doWith(t, anon, r.method, srv.URL+r.path, `{"password":"hijacked!"}`); resp.StatusCode != 401 {
 			t.Errorf("%s %s without login = %d, want 401", r.method, r.path, resp.StatusCode)

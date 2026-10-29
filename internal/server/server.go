@@ -15,7 +15,7 @@
 //	POST   /api/admin/logout         end the session
 //	PUT    /api/admin/password       {password} change the admin password     [admin]
 //	POST   /api/update/check         check for updates now
-//	GET    /api/logs                 recent log lines
+//	GET    /api/logs                 recent log lines                         [admin]
 package server
 
 import (
@@ -75,7 +75,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/admin/logout", s.logout)
 	mux.HandleFunc("PUT /api/admin/password", s.requireAdmin(s.changePassword))
 	mux.HandleFunc("POST /api/update/check", s.checkUpdate)
-	mux.HandleFunc("GET /api/logs", s.logs)
+	mux.HandleFunc("GET /api/logs", s.requireAdmin(s.logs))
 	mux.Handle("GET /", newStaticHandler(s.Static))
 	return mux
 }

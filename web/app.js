@@ -295,6 +295,7 @@ async function openSettings() {
     toast(e.message, true);
     return;
   }
+  showAdminLinks(admin.loggedIn);
   if (!admin.loggedIn) {
     openLogin(admin.passwordSet);
     return;
@@ -398,6 +399,7 @@ $("logoutBtn").addEventListener("click", async () => {
     await api("POST", "/api/admin/logout");
   } catch { /* the cookie is cleared either way */ }
   $("settingsDlg").close();
+  showAdminLinks(false);
   toast("Sessão terminada");
 });
 
@@ -420,6 +422,17 @@ $("testBtn").addEventListener("click", async () => {
 
 // ---------- Logs & updates ----------
 
+// The logs are admin-only, so their link only shows while logged in.
+function showAdminLinks(loggedIn) {
+  $("logsBtn").hidden = !loggedIn;
+}
+
+async function refreshAdmin() {
+  try {
+    showAdminLinks((await api("GET", "/api/admin")).loggedIn);
+  } catch { /* keep the current state */ }
+}
+
 $("logsBtn").addEventListener("click", async () => {
   try {
     const lines = await api("GET", "/api/logs");
@@ -427,6 +440,12 @@ $("logsBtn").addEventListener("click", async () => {
     $("logsDlg").showModal();
     $("logs").scrollTop = $("logs").scrollHeight;
   } catch (e) {
+    if (e.status === 401) {
+      // Session expired (or the app restarted after an update).
+      showAdminLinks(false);
+      openLogin(true);
+      return;
+    }
     toast(e.message, true);
   }
 });
@@ -457,3 +476,4 @@ setInterval(() => { if (!document.hidden) refreshStatus(); }, STATUS_INTERVAL);
 setInterval(refreshSnapshot, SNAPSHOT_INTERVAL);
 setInterval(() => { if (!document.hidden) loadRecordings(); }, 60000);
 refreshStatus().then(refreshSnapshot);
+refreshAdmin();
