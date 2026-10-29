@@ -91,8 +91,10 @@ async function refreshStatus() {
   try {
     s = await api("GET", "/api/status");
   } catch {
-    // The app is down for a moment while it restarts with a new version.
-    if (status && ["waiting", "applying"].includes(status.update.state)) showUpdating(status.update.latest);
+    // The app is down for a moment while it restarts with a new version. The
+    // download, install and restart take a second or two, so the last status
+    // seen is usually still "downloading".
+    if (status && UPDATE_BUSY.includes(status.update.state)) showUpdating(status.update.latest);
     if (updating) return renderUpdating();
     $("pill").textContent = "Sem ligação";
     $("pill").className = "pill busy";
@@ -115,6 +117,7 @@ async function refreshStatus() {
 // ---------- Update overlay ----------
 
 const UPDATE_SLOW = 3 * 60 * 1000;
+const UPDATE_BUSY = ["checking", "downloading", "waiting", "applying"];
 
 function showUpdating(version) {
   if (!updating) {
@@ -534,6 +537,11 @@ document.querySelectorAll("dialog [data-close]").forEach((b) =>
 
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) refreshStatus().then(refreshSnapshot);
+});
+// Mobile browsers restore a page from the back/forward cache without a
+// visibilitychange: check the version again so an update reloads it.
+window.addEventListener("pageshow", (ev) => {
+  if (ev.persisted) refreshStatus().then(refreshSnapshot);
 });
 
 setInterval(renderTimer, 500);
