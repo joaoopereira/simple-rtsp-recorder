@@ -2,6 +2,38 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [2.0.3](https://github.com/joaoopereira/simple-rtsp-recorder/compare/v2.0.2...v2.0.3) (2026-10-29)
+
+
+### Bug Fixes
+
+* **logging:** keep logs in memory when running as a Windows service ([ba9cc32](https://github.com/joaoopereira/simple-rtsp-recorder/commit/ba9cc32fb86c827f2a1eeda39e801f101447e260))
+
+## [2.0.2](https://github.com/joaoopereira/simple-rtsp-recorder/compare/v2.0.1...v2.0.2) (2026-10-29)
+
+## [2.0.1](https://github.com/joaoopereira/simple-rtsp-recorder/compare/v2.0.0...v2.0.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **web:** version static assets so Cloudflare can't serve stale ones ([1b42624](https://github.com/joaoopereira/simple-rtsp-recorder/commit/1b4262453f06cf75ec6eb973855d7c901ac328e2))
+
+## [2.0.0](https://github.com/joaoopereira/simple-rtsp-recorder/compare/v1.3.7...v2.0.0) (2026-10-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* configuration moves from prod.env to config.json (migrated automatically) and the HTTP API changes.
+
+### Features
+
+* protect settings with an admin password ([4b3bc71](https://github.com/joaoopereira/simple-rtsp-recorder/commit/4b3bc7107291926634347e56c38252bb43bb1060))
+* rewrite in Go as a self-updating Windows service ([4ab222c](https://github.com/joaoopereira/simple-rtsp-recorder/commit/4ab222c39d1530ffd0a8a5d940a884f58ab9f194))
+
+### Bug Fixes
+
+* **ci:** look up the BtbN ffmpeg asset instead of hard-coding its name ([92a2244](https://github.com/joaoopereira/simple-rtsp-recorder/commit/92a2244a42b7b08cb4c9f9c48c238cb0c8b607b7))
+
 ## [1.3.7](https://github.com/joaoopereira/simple-rtsp-recorder/compare/v1.3.6...v1.3.7) (2026-06-03)
 
 ## [1.3.6](https://github.com/joaoopereira/simple-rtsp-recorder/compare/v1.3.5...v1.3.6) (2026-02-03)

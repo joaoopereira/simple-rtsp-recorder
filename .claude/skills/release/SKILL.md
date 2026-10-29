@@ -19,6 +19,10 @@ finalized**. The Windows service then restarts on the new version.
 3. Watch the run until it finishes (`actions_get` / `actions_list`). It tests, cross-compiles, bundles ffmpeg.exe and publishes the tag and release with three assets: `simple-rtsp-recorder.exe`, `simple-rtsp-recorder-win-x64.zip` and `checksums.txt`.
 4. Tell the user the version number and that the PC will pick it up within about an hour, once it is idle. In the UI footer, the version changes, and "Verificar atualizações" forces an immediate check.
 
+## Changelog
+
+The workflow writes the new `CHANGELOG.md` section from the conventional commits since the last tag (`scripts/changelog.py`). It commits it to `development` as `chore(release): X.Y.Z`, and uses the same text as the release notes. Only `feat`, `fix`, `perf` and breaking changes are listed, so write commit subjects for humans. Run `git pull` after a release, because the workflow pushed a commit. To preview the next section: `python3 -I scripts/changelog.py vX.Y.Z`.
+
 ## If the release fails
 
 - **"Bundle ffmpeg" step**: `scripts/fetch-ffmpeg.sh` finds the newest `ffmpeg-n*-latest-win64-lgpl-*.zip` (falling back to `master`) in the BtbN/FFmpeg-Builds `latest` release, and its error message lists the assets it saw. If BtbN renamed its assets, adjust the regex. The CI step "Check ffmpeg build is available" runs the same lookup on every push.
