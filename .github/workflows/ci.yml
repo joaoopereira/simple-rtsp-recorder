@@ -34,3 +34,10 @@ jobs:
 
       - name: Check web UI syntax
         run: node --check web/app.js
+
+      # The release bundles ffmpeg.exe from BtbN/FFmpeg-Builds; catch a
+      # missing asset here instead of in the middle of a release.
+      - name: Check ffmpeg build is available
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/fetch-ffmpeg.sh --check

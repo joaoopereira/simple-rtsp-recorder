@@ -21,7 +21,8 @@ finalized**. The Windows service then restarts on the new version.
 
 ## If the release fails
 
-- **"Bundle ffmpeg" step**: the BtbN download URL in `FFMPEG_URL` changed. Pick a current `win64-lgpl` zip from https://github.com/BtbN/FFmpeg-Builds/releases and update the env var.
+- **"Bundle ffmpeg" step**: `scripts/fetch-ffmpeg.sh` finds the newest `ffmpeg-n*-latest-win64-lgpl-*.zip` (falling back to `master`) in the BtbN/FFmpeg-Builds `latest` release, and its error message lists the assets it saw. If BtbN renamed its assets, adjust the regex. The CI step "Check ffmpeg build is available" runs the same lookup on every push.
+- A failed run publishes nothing (no tag, no release), so it is safe to re-run after fixing.
 - **Tests**: fix them on a branch first. Never publish with failing tests: a broken binary would auto-install on the PC.
 
 ## Never

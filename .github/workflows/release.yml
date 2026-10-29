@@ -19,10 +19,6 @@ on:
 permissions:
   contents: write
 
-env:
-  # LGPL build is enough: we only stream-copy, never encode.
-  FFMPEG_URL: https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-win64-lgpl-7.1.zip
-
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -69,11 +65,9 @@ jobs:
             -o dist/simple-rtsp-recorder.exe .
 
       - name: Bundle ffmpeg
-        run: |
-          curl -fsSL -o ffmpeg.zip "$FFMPEG_URL"
-          unzip -q ffmpeg.zip -d ffmpeg
-          cp "$(find ffmpeg -name ffmpeg.exe | head -1)" dist/pkg/ffmpeg.exe
-          cp "$(find ffmpeg -name LICENSE.txt | head -1)" dist/pkg/FFMPEG-LICENSE.txt || true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/fetch-ffmpeg.sh dist/pkg
 
       - name: Package
         run: |
