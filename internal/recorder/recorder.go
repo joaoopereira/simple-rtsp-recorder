@@ -11,17 +11,21 @@
 package recorder
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -94,6 +98,10 @@ type Recorder struct {
 	locked     bool
 	stop       chan struct{}
 	done       chan struct{}
+	// Latest preview frame produced by the recording ffmpeg, so the preview
+	// doesn't open a second stream to the camera while recording.
+	liveFrame   []byte
+	liveFrameAt time.Time
 }
 
 // New creates a recorder. stateFile remembers whether a recording was in
@@ -365,6 +373,7 @@ loop:
 	}
 	r.mu.Lock()
 	r.state, r.file, r.startedAt, r.stop = StateIdle, "", time.Time{}, nil
+	r.liveFrame, r.liveFrameAt = nil, time.Time{}
 	r.mu.Unlock()
 	r.log.Info("recording session ended")
 }
@@ -377,6 +386,10 @@ func (r *Recorder) recordOnce(url, path string, stop chan struct{}) (connected, 
 	if err != nil {
 		return false, false, err
 	}
+	frames, err := cmd.StdoutPipe()
+	if err != nil {
+		return false, false, err
+	}
 	stderr := &logging.LineWriter{Log: r.log, Prefix: "ffmpeg: "}
 	cmd.Stderr = stderr
 	if err := cmd.Start(); err != nil {
@@ -386,8 +399,11 @@ func (r *Recorder) recordOnce(url, path string, stop chan struct{}) (connected, 
 	r.file = filepath.Base(path)
 	r.mu.Unlock()
 
+	// cmd.Wait closes the pipe, so read all of it before waiting.
+	readDone := make(chan struct{})
+	go func() { r.readFrames(frames); close(readDone) }()
 	exited := make(chan error, 1)
-	go func() { exited <- cmd.Wait() }()
+	go func() { <-readDone; exited <- cmd.Wait() }()
 	exitErr := func(err error) error {
 		if line := stderr.LastLine(); line != "" {
 			return errors.New(line)
@@ -443,6 +459,30 @@ func (r *Recorder) recordOnce(url, path string, stop chan struct{}) (connected, 
 	}
 }
 
+// readFrames keeps the latest JPEG of the multipart stream that ffmpeg writes
+// to stdout. It always reads to EOF: if nobody read the pipe, ffmpeg would
+// block and stop recording.
+func (r *Recorder) readFrames(stdout io.Reader) {
+	defer io.Copy(io.Discard, stdout)
+	mr := multipart.NewReader(stdout, "ffmpeg")
+	for {
+		part, err := mr.NextPart()
+		if err != nil {
+			return
+		}
+		data, err := io.ReadAll(io.LimitReader(part, 8<<20))
+		if err != nil {
+			return
+		}
+		if len(data) == 0 {
+			continue
+		}
+		r.mu.Lock()
+		r.liveFrame, r.liveFrameAt = data, time.Now()
+		r.mu.Unlock()
+	}
+}
+
 // quit asks ffmpeg to finish cleanly ("q" on stdin), killing it if it hangs.
 func quit(cmd *exec.Cmd, stdin io.WriteCloser, exited chan error) {
 	io.WriteString(stdin, "q")
@@ -481,27 +521,132 @@ func (r *Recorder) closeFile(path string) {
 	}()
 }
 
+// finalize remuxes path with the index at the start. The same pass lists the
+// video packets (framecrc on stdout) to log how smooth the recording is.
 func (r *Recorder) finalize(path string) error {
 	tmp := path + ".tmp"
 	cmd := exec.CommandContext(r.bgCtx, r.ffmpeg, "-hide_banner", "-nostats", "-loglevel", "error",
-		"-i", path, "-map", "0", "-c", "copy", "-movflags", "+faststart", "-f", "mp4", "-y", tmp)
+		"-i", path, "-map", "0", "-c", "copy", "-movflags", "+faststart", "-f", "mp4", "-y", tmp,
+		"-map", "0:v:0", "-c", "copy", "-f", "framecrc", "pipe:1")
 	configureProcess(cmd)
-	if out, err := cmd.CombinedOutput(); err != nil {
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Run(); err != nil {
 		os.Remove(tmp)
-		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
 	}
 	if err := os.Rename(tmp, path); err != nil {
 		os.Remove(tmp)
 		return err
 	}
+	if st, ok := parseFrameCRC(&stdout); ok {
+		r.log.Info("recording stats", "file", filepath.Base(path), "duration", st.Duration.Round(time.Second).String(),
+			"fps", fmt.Sprintf("%.1f", st.FPS), "kbps", st.Kbps, "keyframeEvery", st.KeyframeEvery.Round(100*time.Millisecond).String(),
+			"gaps", st.Gaps, "maxGap", st.MaxGap.Round(10*time.Millisecond).String(), "lost", st.Lost.Round(100*time.Millisecond).String())
+	}
 	return nil
 }
 
-// Snapshot grabs a single JPEG frame from the stream.
+// Stats describes the video of a recording. A gap is a pause between two
+// frames much longer than usual: the camera skipped frames, which plays as
+// a hiccup. Lost is the total time missing because of gaps.
+type Stats struct {
+	Frames        int
+	Duration      time.Duration
+	FPS           float64
+	Kbps          int64
+	KeyframeEvery time.Duration
+	Gaps          int
+	MaxGap        time.Duration
+	Lost          time.Duration
+}
+
+// minGap is the shortest pause counted as a gap, whatever the frame rate.
+const minGap = 250 * time.Millisecond
+
+// parseFrameCRC reads ffmpeg's framecrc output for one stream: "#tb 0: num/den"
+// then lines "stream, dts, pts, duration, size, crc[, F=flags]". Keyframes
+// have no F= field.
+func parseFrameCRC(r io.Reader) (Stats, bool) {
+	var num, den int64 = 1, 1
+	var dts []time.Duration
+	var size int64
+	keyframes := 0
+	sc := bufio.NewScanner(r)
+	for sc.Scan() {
+		line := sc.Text()
+		if strings.HasPrefix(line, "#tb 0:") {
+			fmt.Sscanf(strings.TrimPrefix(line, "#tb 0:"), "%d/%d", &num, &den)
+			continue
+		}
+		if strings.HasPrefix(line, "#") || den == 0 {
+			continue
+		}
+		f := strings.Split(line, ",")
+		if len(f) < 6 {
+			continue
+		}
+		d, err1 := strconv.ParseInt(strings.TrimSpace(f[1]), 10, 64)
+		n, err2 := strconv.ParseInt(strings.TrimSpace(f[4]), 10, 64)
+		if err1 != nil || err2 != nil {
+			continue
+		}
+		dts = append(dts, time.Duration(float64(d)*float64(num)/float64(den)*float64(time.Second)))
+		size += n
+		if len(f) == 6 {
+			keyframes++
+		}
+	}
+	if len(dts) < 3 {
+		return Stats{}, false
+	}
+	// The first interval is skipped: over RTSP, ffmpeg's timestamps often
+	// jump between the first two frames, before the RTCP sync arrives.
+	deltas := make([]time.Duration, 0, len(dts)-1)
+	for i := 2; i < len(dts); i++ {
+		deltas = append(deltas, dts[i]-dts[i-1])
+	}
+	sorted := append([]time.Duration(nil), deltas...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	usual := sorted[len(sorted)/2]
+	limit := max(3*usual, minGap)
+
+	st := Stats{Frames: len(dts), Duration: dts[len(dts)-1] - dts[1]}
+	for _, d := range deltas {
+		if d > limit {
+			st.Gaps++
+			st.Lost += d - usual
+			st.MaxGap = max(st.MaxGap, d)
+		}
+	}
+	if st.Duration > 0 {
+		st.FPS = float64(len(deltas)) / st.Duration.Seconds()
+		st.Kbps = int64(float64(size*8) / st.Duration.Seconds() / 1000)
+	}
+	if keyframes > 0 {
+		st.KeyframeEvery = st.Duration / time.Duration(keyframes)
+	}
+	return st, true
+}
+
+// liveFrameMaxAge is how old the recording's preview frame may be before
+// Snapshot falls back to opening the stream itself. Frames arrive once per
+// keyframe, which some cameras send only every few seconds at night.
+const liveFrameMaxAge = 30 * time.Second
+
+// Snapshot grabs a single JPEG frame from the stream. While recording it
+// returns the latest frame of the recording itself, because a second stream
+// over the camera's Wi-Fi makes the recording drop frames.
 func (r *Recorder) Snapshot(ctx context.Context) ([]byte, error) {
 	url, _ := r.source()
 	if url == "" {
 		return nil, ErrNotConfigured
+	}
+	r.mu.Lock()
+	frame, at := r.liveFrame, r.liveFrameAt
+	r.mu.Unlock()
+	if frame != nil && time.Since(at) < liveFrameMaxAge {
+		return frame, nil
 	}
 	return SnapshotURL(ctx, r.ffmpeg, url)
 }
@@ -511,8 +656,9 @@ func (r *Recorder) Snapshot(ctx context.Context) ([]byte, error) {
 func SnapshotURL(ctx context.Context, ffmpeg, url string) ([]byte, error) {
 	args := []string{"-hide_banner", "-nostats", "-loglevel", "error"}
 	args = append(args, inputArgs(url)...)
-	args = append(args, "-i", url, "-frames:v", "1", "-vf", "scale='min(960,iw)':-2",
-		"-c:v", "mjpeg", "-q:v", "5", "-f", "image2", "pipe:1")
+	args = append(args, "-i", url, "-frames:v", "1")
+	args = append(args, jpegArgs...)
+	args = append(args, "-f", "image2", "pipe:1")
 	cmd := exec.CommandContext(ctx, ffmpeg, args...)
 	configureProcess(cmd)
 	var stderr strings.Builder
@@ -531,17 +677,27 @@ func SnapshotURL(ctx context.Context, ffmpeg, url string) ([]byte, error) {
 	return out, nil
 }
 
+// recordArgs copies the stream to path and, from the same connection, writes
+// a preview JPEG per keyframe to stdout as multipart (boundary "ffmpeg").
+// -skip_frame only affects the decoder used for the preview; the copied
+// stream keeps every frame.
 func recordArgs(url, path string) []string {
 	args := []string{"-hide_banner", "-nostats", "-loglevel", "error"}
 	args = append(args, inputArgs(url)...)
 	// aac_adtstoasc: some cameras (D-Link DCS-2530L) send AAC with ADTS
 	// headers, which the MP4 muxer rejects on the first audio packet. The
 	// filter leaves plain AAC untouched.
-	return append(args, "-i", url,
+	args = append(args, "-skip_frame", "nokey", "-i", url,
 		"-map", "0:v", "-map", "0:a?", "-c", "copy", "-bsf:a", "aac_adtstoasc",
 		"-f", "mp4", "-movflags", "+frag_keyframe+empty_moov+default_base_moof",
-		"-y", path)
+		"-y", path,
+		"-map", "0:v:0", "-fps_mode", "passthrough")
+	args = append(args, jpegArgs...)
+	return append(args, "-f", "mpjpeg", "pipe:1")
 }
+
+// jpegArgs encodes preview frames, for the snapshot and the live preview.
+var jpegArgs = []string{"-vf", "scale='min(960,iw)':-2", "-c:v", "mjpeg", "-q:v", "5"}
 
 func inputArgs(url string) []string {
 	// ffmpeg needs a keyframe to learn the video size. Joining the stream
