@@ -9,6 +9,8 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,15 +21,16 @@ import (
 
 const (
 	sessionCookie   = "srr_admin"
-	sessionDuration = 12 * time.Hour
+	sessionDuration = 7 * 24 * time.Hour
+	sessionKeyFile  = "session.key"
 	maxFailures     = 5
 	lockoutDuration = 15 * time.Minute
 )
 
 // auth issues and checks admin sessions. A session is a cookie
-// "<expiry>.<hmac>" signed with a per-process random key, so sessions end
-// when the app restarts (e.g. after an update). The signature also covers
-// the password hash: changing the password logs everyone out.
+// "<expiry>.<hmac>" signed with a random key kept in session.key, so sessions
+// survive restarts and updates. The signature also covers the password hash:
+// changing the password logs everyone out.
 type auth struct {
 	key []byte
 
@@ -40,12 +43,25 @@ type failure struct {
 	first time.Time
 }
 
-func newAuth() *auth {
+func newAuth(dir string) (*auth, error) {
+	key, err := loadSessionKey(filepath.Join(dir, sessionKeyFile))
+	return &auth{key: key, failures: map[string]*failure{}}, err
+}
+
+// loadSessionKey reads the signing key, creating it on first use. If it can't
+// be read or saved, a random key is still returned: sessions then only last
+// until the next restart.
+func loadSessionKey(path string) ([]byte, error) {
+	if data, err := os.ReadFile(path); err == nil {
+		if key, err := hex.DecodeString(strings.TrimSpace(string(data))); err == nil && len(key) >= 32 {
+			return key, nil
+		}
+	}
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
 		panic(err)
 	}
-	return &auth{key: key, failures: map[string]*failure{}}
+	return key, os.WriteFile(path, []byte(hex.EncodeToString(key)), 0o600)
 }
 
 func (a *auth) sign(expiry int64, passwordHash string) string {
@@ -155,9 +171,15 @@ func (s *Server) requireAdmin(h http.HandlerFunc) http.HandlerFunc {
 
 func (s *Server) adminStatus(w http.ResponseWriter, r *http.Request) {
 	hash := s.Store.Get().AdminPasswordHash
+	loggedIn := s.auth.valid(r, hash)
+	if loggedIn {
+		// The page asks on every load: renewing here keeps an admin who uses
+		// the site at least once a week logged in.
+		s.auth.setSession(w, r, hash)
+	}
 	writeJSON(w, http.StatusOK, map[string]bool{
 		"passwordSet": hash != "",
-		"loggedIn":    s.auth.valid(r, hash),
+		"loggedIn":    loggedIn,
 	})
 }
 

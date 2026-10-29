@@ -30,7 +30,7 @@ install.ps1                 one-time installer/upgrader (irm | iex)
 
 Runtime files in the install folder: `simple-rtsp-recorder.exe`, `ffmpeg.exe`,
 `config.json`, `recording.state` (present while a recording should be running, so it
-resumes after a restart), `logs/`, `recordings/`.
+resumes after a restart), `session.key` (signs admin sessions), `logs/`, `recordings/`.
 
 ## Contracts that must not change
 
@@ -79,7 +79,7 @@ To run the app against the fake camera, see `.claude/skills/run-app/SKILL.md`.
 - **Admin-only: settings and logs.** `GET/PUT /api/settings`, `POST /api/settings/test`, `PUT /api/admin/password` and `GET /api/logs` are wrapped in `requireAdmin` (`internal/server/auth.go`). Every new endpoint that changes configuration or exposes secrets must be wrapped too. The "Logs" link in the footer only shows while logged in.
 - **Public: everything else** (record/stop, list/play/download/delete recordings, update check). Anyone who reaches https://futsal.retorta.com can use it, so Cloudflare Access is recommended in front of it.
 - The admin password is stored in `config.json` as a PBKDF2-SHA256 hash (`adminPasswordHash`). It is **never** set from the UI without being logged in, because the site is public and the first visitor would become admin. It is set on the PC, either by `install.ps1` (which prompts when none exists) or with `echo <pw> | simple-rtsp-recorder.exe set-admin-password`. Once logged in, it can be changed in the UI.
-- Sessions use an HMAC-signed cookie (`srr_admin`, HttpOnly, SameSite=Strict, Secure behind the tunnel). The key is random per process, so a restart or update logs everyone out. Changing the password invalidates other sessions.
+- Sessions use an HMAC-signed cookie (`srr_admin`, HttpOnly, SameSite=Strict, Secure behind the tunnel). Sessions last 7 days and are renewed on every page load (`GET /api/admin`). The signing key is kept in `session.key` in the install folder, so sessions survive restarts and updates; delete it to log everyone out. Changing the password also invalidates other sessions.
 - Failed logins are locked out per IP: 5 failures in 15 minutes. The IP comes from `Cf-Connecting-Ip`, trusted only when the connection comes from loopback (cloudflared).
 - `config.Store` reloads `config.json` when the file changes on disk, so edits from the CLI or by hand apply without restarting the service.
 - Never return the camera password or the admin hash from the API.

@@ -58,7 +58,10 @@ type Server struct {
 
 // Handler returns the router.
 func (s *Server) Handler() http.Handler {
-	s.auth = newAuth()
+	var err error
+	if s.auth, err = newAuth(s.Store.BaseDir()); err != nil {
+		s.Log.Warn("could not save the session key; admin sessions will end on restart", "err", err)
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/status", s.status)
 	mux.HandleFunc("POST /api/recording/start", s.start)

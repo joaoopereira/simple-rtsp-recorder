@@ -244,6 +244,32 @@ func TestLoginLockoutAndPasswordChange(t *testing.T) {
 	}
 }
 
+func TestSessionSurvivesRestart(t *testing.T) {
+	srv, store := newTestServer(t)
+	c := adminClient(t, srv)
+	resp, _ := doWith(t, c, "GET", srv.URL+"/api/admin", "")
+	var renewed *http.Cookie
+	for _, ck := range resp.Cookies() {
+		if ck.Name == sessionCookie {
+			renewed = ck
+		}
+	}
+	if renewed == nil || renewed.MaxAge != int(sessionDuration.Seconds()) {
+		t.Errorf("session not renewed for 7 days: %+v", renewed)
+	}
+
+	// A restart (or update) builds a new handler; the key is read back from disk.
+	restarted := &Server{Version: "test", Store: store, Log: logging.Discard(), Static: web.FS}
+	srv2 := httptest.NewServer(restarted.Handler())
+	t.Cleanup(srv2.Close)
+	if resp, body := doWith(t, c, "GET", srv2.URL+"/api/logs", ""); resp.StatusCode != 200 {
+		t.Fatalf("logs after restart = %d %s, want 200", resp.StatusCode, body)
+	}
+	if info, err := os.Stat(filepath.Join(store.BaseDir(), sessionKeyFile)); err != nil || info.Size() == 0 {
+		t.Fatalf("session key not saved: %v", err)
+	}
+}
+
 func TestLoginWithoutPasswordSet(t *testing.T) {
 	srv, store := newTestServer(t)
 	cfg := store.Get()
