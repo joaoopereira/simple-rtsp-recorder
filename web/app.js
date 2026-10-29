@@ -94,7 +94,7 @@ async function refreshStatus() {
     // The app is down for a moment while it restarts with a new version. The
     // download, install and restart take a second or two, so the last status
     // seen is usually still "downloading".
-    if (status && UPDATE_BUSY.includes(status.update.state)) showUpdating(status.update.latest);
+    if (status && UPDATE_BUSY.includes(status.update.state)) showUpdating(newVersion(status.update));
     if (updating) return renderUpdating();
     $("pill").textContent = "Sem ligação";
     $("pill").className = "pill busy";
@@ -109,7 +109,7 @@ async function refreshStatus() {
     return;
   }
   status = s;
-  if (status.update.state === "applying") showUpdating(status.update.latest);
+  if (status.update.state === "applying") showUpdating(newVersion(status.update));
   else if (updating) hideUpdating(); // the install failed and the old version kept running
   renderStatus();
 }
@@ -118,6 +118,12 @@ async function refreshStatus() {
 
 const UPDATE_SLOW = 3 * 60 * 1000;
 const UPDATE_BUSY = ["checking", "downloading", "waiting", "applying"];
+
+// The version being installed, if known. While checking, "latest" still holds
+// the previous check's result, which can be the running version.
+function newVersion(u) {
+  return u.state !== "checking" && u.latest && u.latest !== u.current ? u.latest : null;
+}
 
 function showUpdating(version) {
   if (!updating) {
