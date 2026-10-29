@@ -67,10 +67,14 @@ func (c Camera) StreamURL() string {
 	if c.Host == "" {
 		return ""
 	}
+	// The path may carry a query, as DVRs need
+	// (cam/realmonitor?channel=17&subtype=0); keep it unescaped.
+	path, query, _ := strings.Cut(c.Path, "?")
 	u := url.URL{
-		Scheme: "rtsp",
-		Host:   net.JoinHostPort(c.Host, strconv.Itoa(c.Port)),
-		Path:   "/" + strings.TrimPrefix(c.Path, "/"),
+		Scheme:   "rtsp",
+		Host:     net.JoinHostPort(c.Host, strconv.Itoa(c.Port)),
+		Path:     "/" + strings.TrimPrefix(path, "/"),
+		RawQuery: query,
 	}
 	if c.User != "" {
 		u.User = url.UserPassword(c.User, c.Password)

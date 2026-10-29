@@ -14,6 +14,8 @@ func TestStreamURL(t *testing.T) {
 	}{
 		{Camera{Host: "192.168.1.10", Port: 554, Path: "live1.sdp"}, "rtsp://192.168.1.10:554/live1.sdp"},
 		{Camera{Host: "cam", Port: 8554, Path: "/a/b", User: "admin", Password: "p@ss:w"}, "rtsp://admin:p%40ss%3Aw@cam:8554/a/b"},
+		{Camera{Host: "192.168.1.20", Port: 554, Path: "cam/realmonitor?channel=17&subtype=0", User: "futsal", Password: "pw"},
+			"rtsp://futsal:pw@192.168.1.20:554/cam/realmonitor?channel=17&subtype=0"},
 		{Camera{URL: "rtsp://x/y", Host: "ignored"}, "rtsp://x/y"},
 		{Camera{}, ""},
 	}
