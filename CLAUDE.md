@@ -52,7 +52,7 @@ node --check web/app.js
 GOOS=windows GOARCH=amd64 go build -o simple-rtsp-recorder.exe .
 ```
 
-If the sandbox's Go wants to download a newer toolchain, prefix commands with `GOTOOLCHAIN=local`.
+`go.mod` requires Go 1.26 (needed by `golang.org/x/sys`). If the installed Go is older, run commands with `GOTOOLCHAIN=auto`, which downloads the right toolchain from the Go proxy.
 
 To run the app against the fake camera, see `.claude/skills/run-app/SKILL.md`.
 

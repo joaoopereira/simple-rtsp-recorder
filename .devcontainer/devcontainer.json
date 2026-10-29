@@ -1,6 +1,6 @@
 {
 	"name": "simple-rtsp-recorder",
-	"image": "mcr.microsoft.com/devcontainers/go:1.24",
+	"image": "mcr.microsoft.com/devcontainers/go:1.26",
 	"features": {
 		"ghcr.io/devcontainers/features/github-cli": {},
 		"ghcr.io/devcontainers-extra/features/ffmpeg-apt-get": {}

@@ -22,7 +22,7 @@ sleep 5; cat /tmp/fakecam.log   # should only print the "fake camera: rtsp://...
 ## 2. App
 
 ```bash
-GOTOOLCHAIN=local go build -o /tmp/srr .
+GOTOOLCHAIN=auto go build -o /tmp/srr .
 D=/tmp/srrtest; rm -rf $D; mkdir -p $D
 printf 'RTSP_IP=127.0.0.1\nRTSP_PORT=8554\nRTSP_SDP=live1.sdp\nOUTPUT_DIR=recordings\nLABEL_TITLE=Teste\n' > $D/prod.env   # exercises the 1.x migration
 setsid /tmp/srr -dir $D > /tmp/srr.log 2>&1 &
