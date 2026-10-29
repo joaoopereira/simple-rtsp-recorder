@@ -183,6 +183,8 @@ h3 { font-size: 1rem; }
   max-height: calc(100vh - 32px);
 }
 .dlg.wide { width: min(960px, calc(100vw - 32px)); }
+.dlg.narrow { width: min(380px, calc(100vw - 32px)); }
+.dlg > form > p.muted { margin: 0 0 12px; }
 .dlg::backdrop { background: rgb(0 0 0 / .55); }
 .dlg-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 12px; }
 .dlg-head h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

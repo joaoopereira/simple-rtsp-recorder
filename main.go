@@ -5,12 +5,15 @@
 //	simple-rtsp-recorder.exe install    install/replace the Windows service and start it
 //	simple-rtsp-recorder.exe uninstall  stop and remove the Windows service
 //	simple-rtsp-recorder.exe version    print the version
+//	simple-rtsp-recorder.exe set-admin-password   read the settings password from stdin
+//	simple-rtsp-recorder.exe has-admin-password   exit code 0 if one is set, 1 if not
 //
 // Flags: -dir <path> uses another base directory (config, logs) — handy for
 // development, where the binary lives in a temp folder.
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -23,6 +26,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -80,8 +84,18 @@ func main() {
 		}
 	case "version":
 		fmt.Println(version)
+	case "set-admin-password":
+		err = setAdminPassword(*dir)
+	case "has-admin-password":
+		store, oerr := config.Open(*dir)
+		if oerr != nil {
+			fatal(oerr)
+		}
+		if store.Get().AdminPasswordHash == "" {
+			os.Exit(1)
+		}
 	default:
-		err = fmt.Errorf("comando desconhecido %q (use install, uninstall, version ou nada para correr)", cmd)
+		err = fmt.Errorf("comando desconhecido %q (use install, uninstall, set-admin-password, version ou nada para correr)", cmd)
 	}
 	if err != nil {
 		fatal(err)
@@ -181,6 +195,25 @@ func findFFmpeg(configured, exeDir string) string {
 		return p
 	}
 	return name
+}
+
+// setAdminPassword reads the new password from stdin (one line), so it never
+// appears in the process list. A running service picks it up immediately.
+func setAdminPassword(dir string) error {
+	store, err := config.Open(dir)
+	if err != nil {
+		return err
+	}
+	fmt.Fprint(os.Stderr, "Nova palavra-passe de administrador: ")
+	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	if err != nil && line == "" {
+		return errors.New("nenhuma palavra-passe recebida")
+	}
+	if err := store.SetAdminPassword(strings.TrimRight(line, "\r\n")); err != nil {
+		return err
+	}
+	fmt.Fprintln(os.Stderr, "\nPalavra-passe de administrador guardada.")
+	return nil
 }
 
 // reexec starts the (updated) binary again when running in a console.

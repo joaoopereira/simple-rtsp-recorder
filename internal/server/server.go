@@ -7,9 +7,13 @@
 //	DELETE /api/recordings/{name}    delete a recording
 //	GET    /recordings/{name}        play (range requests) or ?download=1
 //	GET    /api/snapshot             JPEG frame from the camera (cached)
-//	GET    /api/settings             settings (password never returned)
-//	PUT    /api/settings             save settings
-//	POST   /api/settings/test        test camera settings, returns a JPEG
+//	GET    /api/settings             settings (password never returned)       [admin]
+//	PUT    /api/settings             save settings                            [admin]
+//	POST   /api/settings/test        test camera settings, returns a JPEG     [admin]
+//	GET    /api/admin                {passwordSet, loggedIn}
+//	POST   /api/admin/login          {password} → session cookie
+//	POST   /api/admin/logout         end the session
+//	PUT    /api/admin/password       {password} change the admin password     [admin]
 //	POST   /api/update/check         check for updates now
 //	GET    /api/logs                 recent log lines
 package server
@@ -44,6 +48,8 @@ type Server struct {
 	Log      *logging.Logger
 	Static   fs.FS
 
+	auth *auth
+
 	snapMu   sync.Mutex
 	snapAt   time.Time
 	snapData []byte
@@ -52,6 +58,7 @@ type Server struct {
 
 // Handler returns the router.
 func (s *Server) Handler() http.Handler {
+	s.auth = newAuth()
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/status", s.status)
 	mux.HandleFunc("POST /api/recording/start", s.start)
@@ -60,9 +67,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/recordings/{name}", s.remove)
 	mux.HandleFunc("GET /recordings/{name}", s.serveRecording)
 	mux.HandleFunc("GET /api/snapshot", s.snapshot)
-	mux.HandleFunc("GET /api/settings", s.getSettings)
-	mux.HandleFunc("PUT /api/settings", s.putSettings)
-	mux.HandleFunc("POST /api/settings/test", s.testSettings)
+	mux.HandleFunc("GET /api/settings", s.requireAdmin(s.getSettings))
+	mux.HandleFunc("PUT /api/settings", s.requireAdmin(s.putSettings))
+	mux.HandleFunc("POST /api/settings/test", s.requireAdmin(s.testSettings))
+	mux.HandleFunc("GET /api/admin", s.adminStatus)
+	mux.HandleFunc("POST /api/admin/login", s.login)
+	mux.HandleFunc("POST /api/admin/logout", s.logout)
+	mux.HandleFunc("PUT /api/admin/password", s.requireAdmin(s.changePassword))
 	mux.HandleFunc("POST /api/update/check", s.checkUpdate)
 	mux.HandleFunc("GET /api/logs", s.logs)
 	static := http.FileServerFS(s.Static)

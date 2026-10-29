@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -28,6 +29,9 @@ func newTestServer(t *testing.T) (*httptest.Server, *config.Store) {
 	if err := store.Update(cfg); err != nil {
 		t.Fatal(err)
 	}
+	if err := store.SetAdminPassword(adminPassword); err != nil {
+		t.Fatal(err)
+	}
 	log := logging.Discard()
 	rec := recorder.New("ffmpeg", func() (string, string) {
 		return store.Get().Camera.StreamURL(), store.RecordingsDir()
@@ -39,10 +43,33 @@ func newTestServer(t *testing.T) (*httptest.Server, *config.Store) {
 	return srv, store
 }
 
+const adminPassword = "correct horse"
+
+// client keeps cookies, like a browser.
+func client() *http.Client {
+	jar, _ := cookiejar.New(nil)
+	return &http.Client{Jar: jar}
+}
+
+// adminClient returns a client logged in as admin.
+func adminClient(t *testing.T, srv *httptest.Server) *http.Client {
+	t.Helper()
+	c := client()
+	if resp, body := doWith(t, c, "POST", srv.URL+"/api/admin/login", `{"password":"`+adminPassword+`"}`); resp.StatusCode != 200 {
+		t.Fatalf("login = %d %s", resp.StatusCode, body)
+	}
+	return c
+}
+
 func do(t *testing.T, method, url, body string) (*http.Response, string) {
 	t.Helper()
+	return doWith(t, http.DefaultClient, method, url, body)
+}
+
+func doWith(t *testing.T, c *http.Client, method, url, body string) (*http.Response, string) {
+	t.Helper()
 	req, _ := http.NewRequest(method, url, strings.NewReader(body))
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,9 +88,13 @@ func do(t *testing.T, method, url, body string) (*http.Response, string) {
 
 func TestSettingsPasswordIsWriteOnly(t *testing.T) {
 	srv, store := newTestServer(t)
+	c := adminClient(t, srv)
+	do := func(t *testing.T, method, url, body string) (*http.Response, string) {
+		return doWith(t, c, method, url, body)
+	}
 
 	_, body := do(t, "GET", srv.URL+"/api/settings", "")
-	if strings.Contains(body, "secret") || !strings.Contains(body, `"hasPassword":true`) {
+	if strings.Contains(body, "secret") || strings.Contains(body, "pbkdf2") || !strings.Contains(body, `"hasPassword":true`) {
 		t.Fatalf("GET /api/settings leaked or hid password state: %s", body)
 	}
 
@@ -75,7 +106,7 @@ func TestSettingsPasswordIsWriteOnly(t *testing.T) {
 	if resp, body := do(t, "PUT", srv.URL+"/api/settings", string(payload)); resp.StatusCode != 200 {
 		t.Fatalf("PUT = %d %s", resp.StatusCode, body)
 	}
-	if got := store.Get(); got.Camera.Password != "secret" || got.Title != "Futsal" {
+	if got := store.Get(); got.Camera.Password != "secret" || got.Title != "Futsal" || got.AdminPasswordHash == "" {
 		t.Fatalf("after PUT: %+v", got)
 	}
 
@@ -145,5 +176,92 @@ func TestStatusAndStatic(t *testing.T) {
 	}
 	if resp, _ := do(t, "POST", srv.URL+"/api/recording/stop", ""); resp.StatusCode != 409 {
 		t.Fatalf("stop while idle = %d, want 409", resp.StatusCode)
+	}
+}
+
+func TestSettingsRequireAdmin(t *testing.T) {
+	srv, store := newTestServer(t)
+	anon := client()
+	for _, r := range []struct{ method, path string }{
+		{"GET", "/api/settings"}, {"PUT", "/api/settings"}, {"POST", "/api/settings/test"}, {"PUT", "/api/admin/password"},
+	} {
+		if resp, _ := doWith(t, anon, r.method, srv.URL+r.path, `{"password":"hijacked!"}`); resp.StatusCode != 401 {
+			t.Errorf("%s %s without login = %d, want 401", r.method, r.path, resp.StatusCode)
+		}
+	}
+	if store.CheckAdminPassword(adminPassword) != nil {
+		t.Fatal("admin password changed without login")
+	}
+
+	// A forged cookie is rejected.
+	req, _ := http.NewRequest("GET", srv.URL+"/api/settings", nil)
+	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: "99999999999.deadbeef"})
+	if resp, _ := http.DefaultClient.Do(req); resp.StatusCode != 401 {
+		t.Errorf("forged cookie = %d, want 401", resp.StatusCode)
+	}
+
+	if _, body := doWith(t, anon, "GET", srv.URL+"/api/admin", ""); body != `{"loggedIn":false,"passwordSet":true}`+"\n" {
+		t.Errorf("admin status = %s", body)
+	}
+}
+
+func TestLoginLockoutAndPasswordChange(t *testing.T) {
+	srv, _ := newTestServer(t)
+	c := client()
+	for i := 0; i < maxFailures; i++ {
+		if resp, _ := doWith(t, c, "POST", srv.URL+"/api/admin/login", `{"password":"wrong"}`); resp.StatusCode != 401 {
+			t.Fatalf("wrong password = %d, want 401", resp.StatusCode)
+		}
+	}
+	if resp, _ := doWith(t, c, "POST", srv.URL+"/api/admin/login", `{"password":"`+adminPassword+`"}`); resp.StatusCode != 429 {
+		t.Fatalf("login after lockout = %d, want 429", resp.StatusCode)
+	}
+
+	// Changing the password logs out other sessions but keeps this one.
+	srv2, _ := newTestServer(t)
+	a, b := adminClient(t, srv2), adminClient(t, srv2)
+	if resp, body := doWith(t, a, "PUT", srv2.URL+"/api/admin/password", `{"password":"short"}`); resp.StatusCode != 400 {
+		t.Fatalf("weak password = %d %s, want 400", resp.StatusCode, body)
+	}
+	if resp, _ := doWith(t, a, "PUT", srv2.URL+"/api/admin/password", `{"password":"a new password"}`); resp.StatusCode != 204 {
+		t.Fatalf("change password = %d", resp.StatusCode)
+	}
+	if resp, _ := doWith(t, a, "GET", srv2.URL+"/api/settings", ""); resp.StatusCode != 200 {
+		t.Errorf("own session after change = %d, want 200", resp.StatusCode)
+	}
+	if resp, _ := doWith(t, b, "GET", srv2.URL+"/api/settings", ""); resp.StatusCode != 401 {
+		t.Errorf("other session after change = %d, want 401", resp.StatusCode)
+	}
+
+	// Logout ends the session.
+	doWith(t, a, "POST", srv2.URL+"/api/admin/logout", "")
+	if resp, _ := doWith(t, a, "GET", srv2.URL+"/api/settings", ""); resp.StatusCode != 401 {
+		t.Errorf("after logout = %d, want 401", resp.StatusCode)
+	}
+}
+
+func TestLoginWithoutPasswordSet(t *testing.T) {
+	srv, store := newTestServer(t)
+	cfg := store.Get()
+	cfg.AdminPasswordHash = ""
+	store.Update(cfg)
+	if resp, body := do(t, "POST", srv.URL+"/api/admin/login", `{"password":""}`); resp.StatusCode != 403 || !strings.Contains(body, "set-admin-password") {
+		t.Fatalf("login with no password set = %d %s", resp.StatusCode, body)
+	}
+	if resp, _ := do(t, "GET", srv.URL+"/api/settings", ""); resp.StatusCode != 401 {
+		t.Fatalf("settings with no password set = %d, want 401", resp.StatusCode)
+	}
+}
+
+func TestClientIP(t *testing.T) {
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Header.Set("Cf-Connecting-Ip", "1.2.3.4")
+	r.RemoteAddr = "127.0.0.1:5000"
+	if got := clientIP(r); got != "1.2.3.4" {
+		t.Errorf("via tunnel = %q", got)
+	}
+	r.RemoteAddr = "192.168.1.50:5000"
+	if got := clientIP(r); got != "192.168.1.50" {
+		t.Errorf("LAN client with forged header = %q", got)
 	}
 }

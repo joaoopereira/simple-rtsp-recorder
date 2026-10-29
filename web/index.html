@@ -116,10 +116,28 @@
         <label>Título<input name="title"></label>
         <label class="check"><input name="autoUpdate" type="checkbox"> Atualizar automaticamente (só quando não há gravações)</label>
       </fieldset>
+      <fieldset>
+        <legend>Administração</legend>
+        <label>Nova palavra-passe de administrador (deixe vazio para manter)<input name="adminPassword" type="password" autocomplete="new-password" minlength="8"></label>
+        <div><button type="button" id="logoutBtn" class="link-btn">Terminar sessão</button></div>
+      </fieldset>
       <p id="settingsError" class="state-error" hidden></p>
       <div class="dlg-actions">
         <button type="button" class="btn" data-close>Cancelar</button>
         <button type="submit" class="btn primary">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="loginDlg" class="dlg narrow">
+    <form id="loginForm">
+      <div class="dlg-head"><h3>Administrador</h3><button type="button" class="icon-btn" data-close aria-label="Fechar">✕</button></div>
+      <p class="muted">As definições só estão disponíveis para o administrador.</p>
+      <label>Palavra-passe<input name="password" type="password" autocomplete="current-password" required></label>
+      <p id="loginError" class="state-error" hidden></p>
+      <div class="dlg-actions">
+        <button type="button" class="btn" data-close>Cancelar</button>
+        <button type="submit" class="btn primary">Entrar</button>
       </div>
     </form>
   </dialog>

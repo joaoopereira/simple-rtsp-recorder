@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // FileName is the settings file, stored in the base directory.
@@ -42,6 +43,9 @@ type Config struct {
 	// FFmpegPath overrides the ffmpeg binary. Empty means ffmpeg(.exe) next to
 	// the executable, falling back to the one on PATH.
 	FFmpegPath string `json:"ffmpegPath,omitempty"`
+	// AdminPasswordHash protects the settings (see HashPassword). Set with
+	// `simple-rtsp-recorder.exe set-admin-password` or from the UI once logged in.
+	AdminPasswordHash string `json:"adminPasswordHash,omitempty"`
 }
 
 // Default returns the settings used when no config file exists.
@@ -117,12 +121,15 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// Store gives concurrent access to the settings and persists changes.
+// Store gives concurrent access to the settings and persists changes. Edits
+// made to config.json by other processes (e.g. set-admin-password while the
+// service runs, or by hand) are picked up automatically.
 type Store struct {
-	mu      sync.RWMutex
+	mu      sync.Mutex
 	path    string
 	baseDir string
 	cfg     Config
+	modTime time.Time
 }
 
 // Open loads config.json from baseDir. When it does not exist the settings are
@@ -130,17 +137,10 @@ type Store struct {
 // used, and the result is written to disk.
 func Open(baseDir string) (*Store, error) {
 	s := &Store{path: filepath.Join(baseDir, FileName), baseDir: baseDir}
-	data, err := os.ReadFile(s.path)
+	cfg, modTime, err := s.read()
 	switch {
 	case err == nil:
-		cfg := Default()
-		if err := json.Unmarshal(data, &cfg); err != nil {
-			return nil, fmt.Errorf("%s: %w", s.path, err)
-		}
-		if err := cfg.Validate(); err != nil {
-			return nil, fmt.Errorf("%s: %w", s.path, err)
-		}
-		s.cfg = cfg
+		s.cfg, s.modTime = cfg, modTime
 		return s, nil
 	case errors.Is(err, os.ErrNotExist):
 		cfg, _, err := migrateLegacy(baseDir)
@@ -156,9 +156,35 @@ func Open(baseDir string) (*Store, error) {
 
 // Get returns a copy of the current settings.
 func (s *Store) Get() Config {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if st, err := os.Stat(s.path); err == nil && !st.ModTime().Equal(s.modTime) {
+		// Changed on disk by someone else. Keep the old settings if the
+		// new file is invalid (e.g. half-edited by hand).
+		if cfg, modTime, err := s.read(); err == nil {
+			s.cfg, s.modTime = cfg, modTime
+		}
+	}
 	return s.cfg
+}
+
+func (s *Store) read() (Config, time.Time, error) {
+	cfg := Default()
+	st, err := os.Stat(s.path)
+	if err != nil {
+		return cfg, time.Time{}, err
+	}
+	data, err := os.ReadFile(s.path)
+	if err != nil {
+		return cfg, time.Time{}, err
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return cfg, time.Time{}, fmt.Errorf("%s: %w", s.path, err)
+	}
+	if err := cfg.Validate(); err != nil {
+		return cfg, time.Time{}, fmt.Errorf("%s: %w", s.path, err)
+	}
+	return cfg, st.ModTime(), nil
 }
 
 // Update validates and persists new settings.
@@ -196,5 +222,11 @@ func (s *Store) save(cfg Config) error {
 	if err := os.WriteFile(tmp, append(data, '\n'), 0o600); err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.path)
+	if err := os.Rename(tmp, s.path); err != nil {
+		return err
+	}
+	if st, err := os.Stat(s.path); err == nil {
+		s.modTime = st.ModTime()
+	}
+	return nil
 }

@@ -36,7 +36,9 @@ async function api(method, url, body) {
   if (!res.ok) {
     let msg = res.statusText;
     try { msg = (await res.json()).error || msg; } catch { /* not JSON */ }
-    throw new Error(msg);
+    const err = new Error(msg);
+    err.status = res.status;
+    throw err;
   }
   const type = res.headers.get("Content-Type") || "";
   if (type.includes("application/json")) return res.json();
@@ -284,7 +286,19 @@ function confirmDelete(rec) {
 const form = $("settingsForm");
 const fields = form.elements;
 
+// The settings are admin-only: log in first when there is no session.
 async function openSettings() {
+  let admin;
+  try {
+    admin = await api("GET", "/api/admin");
+  } catch (e) {
+    toast(e.message, true);
+    return;
+  }
+  if (!admin.loggedIn) {
+    openLogin(admin.passwordSet);
+    return;
+  }
   let s;
   try {
     s = await api("GET", "/api/settings");
@@ -303,6 +317,7 @@ async function openSettings() {
   fields.retentionDays.value = s.retentionDays;
   fields.title.value = s.title;
   fields.autoUpdate.checked = s.autoUpdate;
+  fields.adminPassword.value = "";
   $("settingsError").hidden = true;
   $("testResult").textContent = "";
   $("testImg").hidden = true;
@@ -333,13 +348,57 @@ form.addEventListener("submit", async (ev) => {
   ev.preventDefault();
   try {
     await api("PUT", "/api/settings", formSettings());
+    if (fields.adminPassword.value) {
+      await api("PUT", "/api/admin/password", { password: fields.adminPassword.value });
+    }
     $("settingsDlg").close();
     toast("Definições guardadas");
     refreshStatus().then(refreshSnapshot);
   } catch (e) {
+    if (e.status === 401) {
+      // Session expired (or the app restarted after an update).
+      $("settingsDlg").close();
+      openLogin(true);
+      return;
+    }
     $("settingsError").textContent = e.message;
     $("settingsError").hidden = false;
   }
+});
+
+// ---------- Admin login ----------
+
+const loginForm = $("loginForm");
+
+function openLogin(passwordSet) {
+  loginForm.reset();
+  const err = $("loginError");
+  err.hidden = passwordSet;
+  err.textContent = passwordSet ? "" :
+    "Ainda não foi definida a palavra-passe de administrador. Defina-a no PC: corra o instalador novamente ou execute \"simple-rtsp-recorder.exe set-admin-password\".";
+  loginForm.querySelector("[type=submit]").disabled = !passwordSet;
+  $("loginDlg").showModal();
+}
+
+loginForm.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  try {
+    await api("POST", "/api/admin/login", { password: loginForm.elements.password.value });
+    $("loginDlg").close();
+    openSettings();
+  } catch (e) {
+    $("loginError").textContent = e.message;
+    $("loginError").hidden = false;
+    loginForm.elements.password.select();
+  }
+});
+
+$("logoutBtn").addEventListener("click", async () => {
+  try {
+    await api("POST", "/api/admin/logout");
+  } catch { /* the cookie is cleared either way */ }
+  $("settingsDlg").close();
+  toast("Sessão terminada");
 });
 
 $("testBtn").addEventListener("click", async () => {

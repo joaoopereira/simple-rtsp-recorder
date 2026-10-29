@@ -5,7 +5,7 @@ A single executable that runs as a Windows service and **updates itself** from G
 
 - One-click record and stop, with a live camera preview and a timer
 - Recordings list with an in-browser player, download and delete
-- Camera settings in the UI, with a "test connection" button
+- Camera settings in the UI, with a "test connection" button, protected by an admin password
 - Recordings survive power cuts: files are fragmented MP4 while recording and finalized when stopped
 - Reconnects automatically if the camera drops, and resumes recording after a PC or service restart
 - Optional automatic deletion of old recordings, plus a disk space indicator
@@ -19,9 +19,15 @@ Run PowerShell **as Administrator**:
 irm https://raw.githubusercontent.com/joaoopereira/simple-rtsp-recorder/development/install.ps1 | iex
 ```
 
-Then open `http://localhost:8080` and set up the camera (⚙️).
+The installer asks for an **admin password**. The settings (⚙️) are only available after logging in with it. Then open `http://localhost:8080` and set up the camera.
 
 The same command upgrades an existing installation, including 1.x (Node.js) installs. It installs into the existing folder, converts `prod.env` to `config.json` and keeps the recordings. After that, updates are automatic.
+
+To reset the admin password, run this on the PC as Administrator, in the install folder:
+
+```powershell
+'nova-palavra-passe' | .\simple-rtsp-recorder.exe set-admin-password
+```
 
 <details>
 <summary>Manual install</summary>
@@ -45,6 +51,7 @@ Most settings are edited in the UI and stored in `config.json` next to the execu
 | `retentionDays` | Delete recordings older than N days (`0` = keep forever) |
 | `autoUpdate` | Install new releases automatically when idle |
 | `title` | Page title |
+| `adminPasswordHash` | *(set with `set-admin-password` or in the UI)* Hash of the admin password |
 | `port` | *(file only)* HTTP port, default `8080`. Restart the service after changing it |
 | `ffmpegPath` | *(file only)* Custom ffmpeg. By default the app uses the `ffmpeg.exe` shipped next to it |
 

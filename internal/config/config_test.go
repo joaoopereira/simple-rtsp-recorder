@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestStreamURL(t *testing.T) {
@@ -80,5 +81,46 @@ func TestOpenDefaultsAndUpdate(t *testing.T) {
 	bad.Camera.Host = "admin@cam"
 	if err := s.Update(bad); err == nil {
 		t.Error("expected validation error for host with credentials")
+	}
+}
+
+func TestPasswordHash(t *testing.T) {
+	if _, err := HashPassword("short"); err != ErrWeakPassword {
+		t.Fatalf("weak password err = %v", err)
+	}
+	h, err := HashPassword("palavra-passe çã")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !CheckPassword(h, "palavra-passe çã") || CheckPassword(h, "palavra-passe ca") || CheckPassword("garbage", "x") {
+		t.Fatal("CheckPassword gave a wrong answer")
+	}
+	h2, _ := HashPassword("palavra-passe çã")
+	if h == h2 {
+		t.Fatal("hashes must be salted")
+	}
+}
+
+func TestStorePicksUpExternalChanges(t *testing.T) {
+	dir := t.TempDir()
+	running, err := Open(dir) // e.g. the service
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Make sure the next write gets a different mtime on coarse filesystems.
+	time.Sleep(20 * time.Millisecond)
+	cli, _ := Open(dir) // e.g. set-admin-password from the command line
+	if err := cli.SetAdminPassword("from the cli!"); err != nil {
+		t.Fatal(err)
+	}
+	if err := running.CheckAdminPassword("from the cli!"); err != nil {
+		t.Fatalf("running store did not reload: %v", err)
+	}
+	// A later save by the running store must keep the new hash.
+	cfg := running.Get()
+	cfg.Title = "x"
+	running.Update(cfg)
+	if err := cli.CheckAdminPassword("from the cli!"); err != nil {
+		t.Fatalf("hash lost after update: %v", err)
 	}
 }

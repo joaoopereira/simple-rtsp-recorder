@@ -20,6 +20,13 @@ $ZipName = 'simple-rtsp-recorder-win-x64.zip'
 
 function Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 
+function Read-SecretText($prompt) {
+    $secure = Read-Host "    $prompt" -AsSecureString
+    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+    try { return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+    finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+}
+
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     throw 'Execute o PowerShell como Administrador e tente novamente.'
@@ -66,8 +73,27 @@ try {
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
     Copy-Item -Path (Join-Path $tmp 'pkg\*') -Destination $InstallDir -Recurse -Force
 
+    $exe = Join-Path $InstallDir $ExeName
+    & $exe has-admin-password
+    if ($LASTEXITCODE -ne 0) {
+        Step 'Defina a palavra-passe de administrador (protege as definições na interface web)'
+        while ($true) {
+            $first = Read-SecretText 'Palavra-passe (mínimo 8 caracteres)'
+            $second = Read-SecretText 'Repita a palavra-passe'
+            if ($first -ne $second) { Write-Host '    As palavras-passe não coincidem.' -ForegroundColor Yellow; continue }
+            if ($first.Length -lt 8) { Write-Host '    Tem de ter pelo menos 8 caracteres.' -ForegroundColor Yellow; continue }
+            break
+        }
+        # Passed on stdin (UTF-8) so it never shows up in the process list.
+        $previousEncoding = $OutputEncoding
+        $OutputEncoding = New-Object Text.UTF8Encoding $false
+        $first | & $exe set-admin-password
+        $OutputEncoding = $previousEncoding
+        if ($LASTEXITCODE -ne 0) { throw 'Falha ao guardar a palavra-passe de administrador.' }
+    }
+
     Step 'A instalar o serviço...'
-    & (Join-Path $InstallDir $ExeName) install
+    & $exe install
     if ($LASTEXITCODE -ne 0) { throw 'Falha ao instalar o serviço (ver mensagem acima).' }
 } finally {
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
@@ -75,6 +101,6 @@ try {
 
 Write-Host ''
 Write-Host 'Instalação concluída.' -ForegroundColor Green
-Write-Host "Interface: http://localhost:8080   (definições da câmara no ícone da engrenagem)"
+Write-Host "Interface: http://localhost:8080   (definições: ícone da engrenagem, com a palavra-passe de administrador)"
 Write-Host "Pasta:     $InstallDir"
 Write-Host 'As próximas versões são instaladas automaticamente quando não houver gravações.'
