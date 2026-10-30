@@ -708,7 +708,9 @@ func SnapshotURL(ctx context.Context, ffmpeg, url string) ([]byte, error) {
 // recordArgs copies the stream to path and, from the same connection, writes
 // a preview JPEG per keyframe to stdout as multipart (boundary "ffmpeg").
 // -skip_frame only affects the decoder used for the preview; the copied
-// stream keeps every frame.
+// stream keeps every frame. -fps_mode vfr drops a preview frame whose
+// timestamp goes backwards (seen with Dahua DVR streams) instead of making
+// the mpjpeg muxer log a warning.
 func recordArgs(url, path string) []string {
 	args := []string{"-hide_banner", "-nostats", "-loglevel", "error"}
 	args = append(args, inputArgs(url)...)
@@ -719,7 +721,7 @@ func recordArgs(url, path string) []string {
 		"-map", "0:v", "-map", "0:a?", "-c", "copy", "-bsf:a", "aac_adtstoasc",
 		"-f", "mp4", "-movflags", "+frag_keyframe+empty_moov+default_base_moof",
 		"-y", path,
-		"-map", "0:v:0", "-fps_mode", "passthrough")
+		"-map", "0:v:0", "-fps_mode", "vfr")
 	args = append(args, jpegArgs...)
 	return append(args, "-f", "mpjpeg", "pipe:1")
 }
